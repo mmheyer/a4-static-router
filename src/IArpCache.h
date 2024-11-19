@@ -11,12 +11,20 @@ struct ArpEntry
     uint32_t ip; /**< IP address of the entry. */
     mac_addr mac; /**< MAC address corresponding to the IP. */
     std::chrono::time_point<std::chrono::steady_clock> timeAdded; /**< Time when the entry was added. */
+
+    // constructor
+    ArpEntry(uint32_t ip, mac_addr mac) 
+        : ip(ip), mac(mac), timeAdded(std::chrono::steady_clock::now()) {};
 };
 
 struct AwaitingPacket
 {
     Packet packet; /**< Packet that is awaiting the ARP response. */
     std::string iface; /**< Interface on which to send the packet. */
+
+    // constructor
+    AwaitingPacket(const Packet& packet, const std::string& iface)
+        : packet(packet), iface(iface) {};
 };
 
 struct ArpRequest
