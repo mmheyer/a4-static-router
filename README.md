@@ -337,7 +337,8 @@ In summary, your solution:
 ### FAQ
 - If you get a packet with TTL=1, you should send a ICMP Time To Live Exceeded Message. If you get a packet with TTL=0 somehow, you should feel free to drop it. 
 - If you get a ping request for one of the switch's interfaces, you should not send an ARP request to figure out where to respond, as you already know what the destination MAC address should be. At the same time, no mapping not explicitly figured out from an ARP response should enter your ARP cache. 
-- Values in the routing table are in network order. 
+- Values in the routing table are in network order.
+- Your router's ARP Cache should only cache ARP responses for ARP requests that it sends out. It should not cache responses for ARP requests from other hosts on the network. 
 
 <a name="debugging"></a>
 ## How to Debug
