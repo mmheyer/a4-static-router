@@ -64,7 +64,7 @@ void ArpCache::addEntry(uint32_t ip, const mac_addr& mac) {
     std::unique_lock lock(mutex);
 
     // add the IP-MAC mapping to the ARP cache
-    entries[ip] = ArpEntry(ip, mac);
+    entries[ip] = {ip, mac, std::chrono::steady_clock::now()};
 
     // check if there are pending packets for this IP
     auto it = requests.find(ip);
