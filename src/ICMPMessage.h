@@ -15,7 +15,7 @@ private:
         time_exceeded = 11
     };
 public:
-    ICMPMessage(IPacketSender& packetSender, const std::string& iface)
+    ICMPMessage(std::shared_ptr<IPacketSender>, const std::string& iface)
         : packetSender(packetSender), iface(iface) {}
 
     void createEchoReply(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
@@ -24,7 +24,7 @@ public:
     void createPortUnreachable(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
 
 private:
-    IPacketSender& packetSender;
+    std::shared_ptr<IPacketSender> packetSender;
     std::string iface;
 
     void sendMessage(uint32_t srcIp, uint32_t dstIp, const uint8_t* payload, size_t payloadSize, uint8_t protocol);

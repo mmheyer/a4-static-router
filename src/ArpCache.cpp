@@ -1,4 +1,5 @@
 #include "ArpCache.h"
+#include "ICMPMessage.h"
 
 #include <thread>
 #include <cstring>
@@ -46,7 +47,8 @@ void ArpCache::tick() {
             if (req.timesSent >= 7) {
                 // send ICMP "Destination Host Unreachable" to each packet's source
                 for (const auto& awaitingPacket : req.awaitingPackets) {
-                    // TODO: finish writing this function
+                    ICMPMessage icmpMessage(packetSender, awaitingPacket.iface);
+                    // TODO: finish this function
                 }
             }
          }

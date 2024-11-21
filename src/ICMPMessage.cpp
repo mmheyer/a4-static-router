@@ -59,7 +59,7 @@ void ICMPMessage::sendMessage(uint32_t srcIp, uint32_t dstIp, const uint8_t* pay
 
     // Create a Packet object, which is just a vector<uint8_t> here
     Packet finalPacket(packet.begin(), packet.end());
-    packetSender.sendPacket(finalPacket, iface);
+    packetSender->sendPacket(finalPacket, iface);
 }
 
 void ICMPMessage::wrapInIPHeader(std::vector<uint8_t>& packet, uint32_t srcIp, uint32_t dstIp, uint8_t protocol) {
