@@ -388,16 +388,17 @@ We have provided you with some basic debugging functions in `utils.h`, `utils.c`
 
 <a name="submitting"></a>
 ## Submitting
-Submission to the autograder will be done [here](https://g489.eecs.umich.edu/). Submission policy will be announced when the autograder is released, which we anticipate being around halfway through the assignment.
-
-This assignment follows more of a fill-in-the-blank format than the first three, meaning we provide code skeleton that you fill in. Therefore,
+Submission to the autograder will be done [here](https://g489.eecs.umich.edu/).
 
 The submission may include any files that you have modified or added. However, **you must ensure that:**
 - The `IPacketSender.h` file is not modified.
 - The `IArpCache.h` file is not modified.
 - The `IRoutingTable.h` file is not modified.
+- Nothing in the `detail/` directory is modified.
 - The signatures of `StaticRouter`'s constructor and `handlePacket` function are not modified.
 
+### What to Submit
+You should submit all files **outside** of the `detail/` directory that is necessary for your code to compile. We will automatically compile any added files with `.cpp` or `.h` extensions with your code. You must ensure that your code compiles with no modifications to the provided `CMakeLists.txt` file.
 ### Autograder
 Fall 2024 is the first time we are using our new Autograder for this assignment! Although we have attempted to test it thoroughly, please reach out during Office Hours or over Ed if you think that you are incorrectly failing a test case.  
 
