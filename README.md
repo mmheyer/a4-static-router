@@ -348,7 +348,8 @@ In summary, your solution:
    2) Set the checksum to 0.
    3) Call the cksum function over the header to calculate the checksum.
    4) Set the cksum in the header to the value you just calculated without any host/network conversion.
-- You do not need to think about the Ethernet preamble and CRC; these will not be included in any packets given to you, nor should you include them in any packets that you send out. The ethernet header should be exactly the fields in `sr_ethernet_hdr`. 
+- You do not need to think about the Ethernet preamble and CRC; these will not be included in any packets given to you, nor should you include them in any packets that you send out. The ethernet header should be exactly the fields in `sr_ethernet_hdr`.
+- As you are implementing a router, it is important to be efficient. While we do not need you to write hyper-efficient code, it is important to make design decisions that ensure packets are sent out as soon as possible. 
 
 <a name="debugging"></a>
 ## How to Debug
