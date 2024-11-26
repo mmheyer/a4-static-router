@@ -38,10 +38,32 @@ RoutingTable::RoutingTable(const std::filesystem::path& routingTablePath) {
     }
 }
 
+// Called when our router needs to determine how to forward an IP packet
 std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
-    // TODO: Your code below
 
-    return routingEntries[0]; // Placeholder
+    uint32_t bestMatchLength = 0; // len of longest matching prefix, initially 0
+    std::optional<RoutingEntry> bestEntry = std::nullopt; // initially, no match 
+
+    // for all entries in the routing table
+    for (const auto& entry : routingEntries) {
+        // apply the subnet mask to destination IP and input ip
+        uint32_t maskedDest = entry.dest & entry.mask; // bitwise & desination IP and mask
+        uint32_t maskedIP = ip & entry.mask; // bitwise & input ip and mask
+
+        // if maskedDest == maskedIP, the input ip falls within the entry's subnet mask
+        // therefore, the input ip belongs to the same network as the routing entry
+        if (maskedDest == maskedIP) {
+            // count num of bits set to 1 (prefix length) in the subnet mask
+            uint32_t maskLength = __builtin_popcount(entry.mask);
+            // update best match if we found an entry with a longer prefix
+            if (maskLength > bestMatchLength) {
+                bestMatchLength = maskLength;
+                bestEntry = entry;
+            }
+        }
+    }
+    // return std::nullopt if no match, otherwise return longest prefix match
+    return bestEntry;
 }
 
 RoutingInterface RoutingTable::getRoutingInterface(const std::string& iface) {
