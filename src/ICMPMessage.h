@@ -18,10 +18,10 @@ public:
     ICMPMessage(std::shared_ptr<IPacketSender>, const std::string& iface)
         : packetSender(packetSender), iface(iface) {}
 
-    void createEchoReply(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
-    void createDestinationUnreachable(uint32_t srcIp, uint32_t dstIp, uint8_t code, const uint8_t* data, size_t dataSize);
-    void createTimeExceeded(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
-    void createPortUnreachable(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
+    void sendEchoReply(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
+    void sendDestinationUnreachable(uint32_t srcIp, uint32_t dstIp, const Packet& originalPacket, uint8_t icmpCode);
+    void sendTimeExceeded(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
+    void sendPortUnreachable(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize);
 
 private:
     std::shared_ptr<IPacketSender> packetSender;

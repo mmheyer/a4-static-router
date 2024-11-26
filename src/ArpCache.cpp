@@ -47,9 +47,28 @@ void ArpCache::tick() {
             if (req.timesSent >= 7) {
                 // send ICMP "Destination Host Unreachable" to each packet's source
                 for (const auto& awaitingPacket : req.awaitingPackets) {
+                    // extract original IP header
+                    const sr_ip_hdr_t* originalIpHeader = reinterpret_cast<const sr_ip_hdr_t*>(awaitingPacket.packet.data());
+
+                    // srcIp is the IP address of the router interface on which the packet was received or
+                    // which would have forwarded the packet.
+                    // This represents the "return address" to which the sender will reply
+                    uint32_t srcIp = routingTable->getRoutingInterface(awaitingPacket.iface).ip;
+
+                    // dstIp is the source IP address of the original packet
+                    uint32_t dstIp = extractSourceIp(awaitingPacket.packet);
+
+                    // create ICMP message
                     ICMPMessage icmpMessage(packetSender, awaitingPacket.iface);
-                    // TODO: finish this function
+                    icmpMessage.sendDestinationUnreachable(srcIp, dstIp, awaitingPacket.packet, 1);
                 }
+
+                // remove the request after sending ICMP errors
+                reqIt = requests.erase(reqIt);
+                continue; // move to the next request
+            } else {
+                // resend ARP request
+                
             }
          }
     }
@@ -120,4 +139,19 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
         it->second.awaitingPackets.emplace_back(packet, iface);
     }
 
+}
+
+// Helpers
+uint32_t extractSourceIp(const Packet& packet) {
+    // Ensure the packet is large enough to contain an Ethernet + IP header
+    constexpr size_t ethernetHeaderLength = sizeof(sr_ethernet_hdr_t);
+    if (packet.size() < ethernetHeaderLength + sizeof(sr_ip_hdr_t)) {
+        throw std::runtime_error("Packet too short to contain IP header");
+    }
+
+    // Skip the Ethernet header and cast to IP header
+    const sr_ip_hdr_t* ipHeader = reinterpret_cast<const sr_ip_hdr_t*>(packet.data() + ethernetHeaderLength);
+
+    // Return the source IP address
+    return ipHeader->ip_src;
 }

@@ -1,0 +1,64 @@
+#ifndef ICMPSENDER_H
+#define ICMPSENDER_H
+
+#include "IICMPSender.h"
+#include "IPacketSender.h"
+#include "protocol.h" // For packet structure definitions
+#include <memory>
+#include <vector>
+#include <string>
+#include <cstdint>
+
+/**
+ * @brief Implementation of the ICMPSender interface.
+ */
+class ICMPSenderImpl : public ICMPSender {
+public:
+    /**
+     * @brief Constructor for ICMPSenderImpl.
+     * @param packetSender Shared pointer to the IPacketSender interface.
+     */
+    explicit ICMPSenderImpl(std::shared_ptr<IPacketSender> packetSender);
+
+    /**
+     * @brief Sends a destination unreachable message.
+     * @param packet The original packet causing the error.
+     * @param iface The interface on which the message is sent.
+     * @param sourceIP The IP address to use as the source in the ICMP message.
+     * @param icmpCode The ICMP code indicating the specific error (e.g., network unreachable, host unreachable).
+     */
+    void sendDestinationUnreachable(const std::vector<uint8_t>& packet,
+                                    const std::string& iface,
+                                    uint32_t sourceIP,
+                                    uint8_t icmpCode) override;
+
+    /**
+     * @brief Sends a time exceeded message.
+     * @param packet The original packet causing the error.
+     * @param iface The interface on which the message is sent.
+     * @param sourceIP The IP address to use as the source in the ICMP message.
+     */
+    void sendTimeExceeded(const std::vector<uint8_t>& packet,
+                          const std::string& iface,
+                          uint32_t sourceIP) override;
+
+private:
+    std::shared_ptr<IPacketSender> packetSender_;
+
+    /**
+     * @brief Constructs the ICMP message for the given parameters.
+     * @param originalPacket The original packet causing the error.
+     * @param sourceIP The source IP address for the ICMP message.
+     * @param destIP The destination IP address for the ICMP message.
+     * @param icmpType The type of the ICMP message.
+     * @param icmpCode The code of the ICMP message.
+     * @return A complete ICMP message wrapped in an IP header as a vector of bytes.
+     */
+    std::vector<uint8_t> constructICMPMessage(const std::vector<uint8_t>& originalPacket,
+                                              uint32_t sourceIP,
+                                              uint32_t destIP,
+                                              uint8_t icmpType,
+                                              uint8_t icmpCode);
+};
+
+#endif // ICMPSENDERIMPL_H

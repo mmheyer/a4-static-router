@@ -2,7 +2,7 @@
 #include "utils.h"
 
 // Public methods
-void ICMPMessage::createEchoReply(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize) {
+void ICMPMessage::sendEchoReply(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize) {
     sr_icmp_hdr_t icmpHdr = {0};
     icmpHdr.icmp_type = echo_reply;
     icmpHdr.icmp_code = 0;
@@ -18,20 +18,40 @@ void ICMPMessage::createEchoReply(uint32_t srcIp, uint32_t dstIp, const uint8_t*
     sendMessage(srcIp, dstIp, icmpPacket.data(), icmpPacket.size(), ip_protocol_icmp);
 }
 
-void ICMPMessage::createDestinationUnreachable(uint32_t srcIp, uint32_t dstIp, uint8_t code, const uint8_t* data, size_t dataSize) {
-    sr_icmp_t3_hdr_t icmpHdr = {0};
-    icmpHdr.icmp_type = destination_unreachable;
-    icmpHdr.icmp_code = code;
-    icmpHdr.icmp_sum = 0;
+void ICMPMessage::sendDestinationUnreachable(uint32_t srcIp, uint32_t dstIp, const Packet& originalPacket, uint8_t icmpCode) {
+    // Create and populate the ICMP header
+    sr_icmp_t3_hdr_t icmpHdr = {};
+    icmpHdr.icmp_type = 3;  // Destination Unreachable
+    icmpHdr.icmp_code = icmpCode;
+    icmpHdr.icmp_sum = 0;   // Checksum will be calculated later
+    memcpy(icmpHdr.data, originalPacket.data(), ICMP_DATA_SIZE);
 
-    std::memcpy(icmpHdr.data, data, std::min(dataSize, sizeof(icmpHdr.data)));
+    // Compute checksum
+    icmpHdr.icmp_sum = cksum(&icmpHdr, sizeof(icmpHdr));
 
-    icmpHdr.icmp_sum = cksum(reinterpret_cast<uint8_t*>(&icmpHdr), sizeof(icmpHdr));
+    // Create and populate the IP header
+    sr_ip_hdr_t ipHeader = {};
+    ipHeader.ip_hl = 5;
+    ipHeader.ip_v = 4;
+    ipHeader.ip_tos = 0;
+    ipHeader.ip_len = htons(sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t));
+    ipHeader.ip_id = htons(0);  // ID can be 0
+    ipHeader.ip_off = htons(0);
+    ipHeader.ip_ttl = 64;
+    ipHeader.ip_p = ip_protocol_icmp;
+    ipHeader.ip_src = srcIp;
+    ipHeader.ip_dst = dstIp;
+    ipHeader.ip_sum = cksum(&ipHeader, sizeof(ipHeader));
+
+    // Construct the packet
+    Packet packet(sizeof(ipHeader) + sizeof(icmpHdr));
+    memcpy(packet.data(), &ipHeader, sizeof(ipHeader));
+    memcpy(packet.data() + sizeof(ipHeader), &icmpHdr, sizeof(icmpHdr));
 
     sendMessage(srcIp, dstIp, reinterpret_cast<uint8_t*>(&icmpHdr), sizeof(icmpHdr), ip_protocol_icmp);
 }
 
-void ICMPMessage::createTimeExceeded(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize) {
+void ICMPMessage::sendTimeExceeded(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize) {
     sr_icmp_hdr_t icmpHdr = {0};
     icmpHdr.icmp_type = time_exceeded;
     icmpHdr.icmp_code = 0;
@@ -47,8 +67,8 @@ void ICMPMessage::createTimeExceeded(uint32_t srcIp, uint32_t dstIp, const uint8
     sendMessage(srcIp, dstIp, icmpPacket.data(), icmpPacket.size(), ip_protocol_icmp);
 }
 
-void ICMPMessage::createPortUnreachable(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize) {
-    createDestinationUnreachable(srcIp, dstIp, 3, data, dataSize);
+void ICMPMessage::sendPortUnreachable(uint32_t srcIp, uint32_t dstIp, const uint8_t* data, size_t dataSize) {
+    sendDestinationUnreachable(srcIp, dstIp, 3, data, dataSize);
 }
 
 // Private methods
