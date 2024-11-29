@@ -1,7 +1,6 @@
 #ifndef ICMPSENDER_H
 #define ICMPSENDER_H
 
-#include "IICMPSender.h"
 #include "IPacketSender.h"
 #include "protocol.h" // For packet structure definitions
 #include <memory>
@@ -10,15 +9,15 @@
 #include <cstdint>
 
 /**
- * @brief Implementation of the ICMPSender interface.
+ * @brief Handles sending ICMP messages.
  */
-class ICMPSenderImpl : public ICMPSender {
+class ICMPSender {
 public:
     /**
-     * @brief Constructor for ICMPSenderImpl.
-     * @param packetSender Shared pointer to the IPacketSender interface.
+     * @brief Constructor for ICMPSender.
+     * @param packetSender Shared pointer to the IPacketSender.
      */
-    explicit ICMPSenderImpl(std::shared_ptr<IPacketSender> packetSender);
+    explicit ICMPSender(std::shared_ptr<IPacketSender> packetSender);
 
     /**
      * @brief Sends a destination unreachable message.
@@ -30,7 +29,7 @@ public:
     void sendDestinationUnreachable(const std::vector<uint8_t>& packet,
                                     const std::string& iface,
                                     uint32_t sourceIP,
-                                    uint8_t icmpCode) override;
+                                    uint8_t icmpCode);
 
     /**
      * @brief Sends a time exceeded message.
@@ -40,7 +39,7 @@ public:
      */
     void sendTimeExceeded(const std::vector<uint8_t>& packet,
                           const std::string& iface,
-                          uint32_t sourceIP) override;
+                          uint32_t sourceIP);
 
 private:
     std::shared_ptr<IPacketSender> packetSender_;
@@ -61,4 +60,4 @@ private:
                                               uint8_t icmpCode);
 };
 
-#endif // ICMPSENDERIMPL_H
+#endif // ICMPSENDER_H
