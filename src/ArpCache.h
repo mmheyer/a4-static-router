@@ -15,6 +15,8 @@
 #include "IPacketSender.h"
 #include "RouterTypes.h"
 #include "IRoutingTable.h"
+#include "ICMPSender.h"
+#include "ARPSender.h"
 
 class ArpCache : public IArpCache {
 public:
@@ -45,6 +47,9 @@ private:
 
     std::unordered_map<ip_addr, ArpEntry> entries;
     std::unordered_map<ip_addr, ArpRequest> requests;
+
+    std::unique_ptr<ICMPSender> icmpSender;
+    std::unique_ptr<ARPSender> arpSender;
 };
 
 

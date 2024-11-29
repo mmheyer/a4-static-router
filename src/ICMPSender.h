@@ -13,6 +13,14 @@
  */
 class ICMPSender {
 public:
+    enum class DestinationUnreachableCode {
+        NETWORK_UNREACHABLE = 0, // Network Unreachable (Code 0)
+        HOST_UNREACHABLE = 1,    // Host Unreachable (Code 1)
+        // PROTOCOL_UNREACHABLE = 2,// Protocol Unreachable (Code 2)
+        PORT_UNREACHABLE = 3,    // Port Unreachable (Code 3)
+        // FRAGMENTATION_NEEDED = 4 // Fragmentation Needed (Code 4)
+    };
+
     /**
      * @brief Constructor for ICMPSender.
      * @param packetSender Shared pointer to the IPacketSender.

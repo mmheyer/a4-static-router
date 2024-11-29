@@ -1,7 +1,7 @@
 #include "ICMPSender.h"
 
 ICMPSender::ICMPSender(std::shared_ptr<IPacketSender> packetSender)
-    : packetSender_(std::move(packetSender)) {}
+    : packetSender_() {}
 
 void ICMPSender::sendDestinationUnreachable(const std::vector<uint8_t>& packet,
                                             const std::string& iface,

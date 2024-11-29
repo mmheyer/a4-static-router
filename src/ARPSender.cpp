@@ -1,7 +1,7 @@
 #include "ARPSender.h"
 
 ARPSender::ARPSender(std::shared_ptr<IPacketSender> packetSender)
-    : packetSender_(std::move(packetSender)) {}
+    : packetSender_() {}
 
 void ARPSender::sendArpRequest(uint32_t targetIP,
                                uint32_t senderIP,

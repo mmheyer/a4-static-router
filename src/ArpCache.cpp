@@ -1,9 +1,9 @@
 #include "ArpCache.h"
-#include "ICMPMessage.h"
 
 #include <thread>
 #include <cstring>
 #include <spdlog/spdlog.h>
+#include <iostream>
 
 #include "protocol.h"
 #include "utils.h"
@@ -14,6 +14,9 @@ ArpCache::ArpCache(std::chrono::milliseconds timeout, std::shared_ptr<IPacketSen
 , packetSender(std::move(packetSender))
 , routingTable(std::move(routingTable)) {
     thread = std::make_unique<std::thread>(&ArpCache::loop, this);
+
+    icmpSender = std::make_unique<ICMPSender>(packetSender);
+    arpSender = std::make_unique<ARPSender>(packetSender);
 }
 
 ArpCache::~ArpCache() {
@@ -32,12 +35,12 @@ void ArpCache::loop() {
 
 void ArpCache::tick() {
     std::unique_lock lock(mutex);
-    // TODO: Your code here
+    // Your code here
 
     // get the current time
     auto now = std::chrono::steady_clock::now();
 
-    // process ARP requests
+    // for each arp request
     for (auto reqIt = requests.begin(); reqIt != requests.end();) {
         ArpRequest& req = reqIt->second;
 
@@ -54,26 +57,50 @@ void ArpCache::tick() {
                     // which would have forwarded the packet.
                     // This represents the "return address" to which the sender will reply
                     uint32_t srcIp = routingTable->getRoutingInterface(awaitingPacket.iface).ip;
-
-                    // dstIp is the source IP address of the original packet
-                    uint32_t dstIp = extractSourceIp(awaitingPacket.packet);
-
-                    // create ICMP message
-                    ICMPMessage icmpMessage(packetSender, awaitingPacket.iface);
-                    icmpMessage.sendDestinationUnreachable(srcIp, dstIp, awaitingPacket.packet, 1);
+                    
+                    icmpSender->sendDestinationUnreachable(
+                        awaitingPacket.packet,  // Original packet
+                        awaitingPacket.iface,   // Outgoing interface
+                        srcIp,                  // Source IP
+                        static_cast<uint8_t>(ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE) // ICMP Code
+                    );
                 }
 
                 // remove the request after sending ICMP errors
                 reqIt = requests.erase(reqIt);
                 continue; // move to the next request
+            // otherwise, retry sending ARP request
             } else {
-                // resend ARP request
-                
+                // query the routing table to find the best route for the target IP
+                auto route = routingTable->getRoutingEntry(req.ip);
+                if (route) {
+                    // an entry was found
+                    RoutingEntry entry = *route;
+                    
+                    // get the ip of the iface specified by the entry
+                    RoutingInterface nextHop = routingTable->getRoutingInterface(entry.iface);
+                    std::cout << "Sending packet via interface: " << entry.iface << " to next hop: " << nextHop.ip << std::endl;
+
+                    // resend ARP request
+                    arpSender->sendArpRequest(
+                        req.ip,      // Target IP address
+                        nextHop.ip,      // Sender IP address
+                        nextHop.mac.data(),     // Sender MAC address
+                        nextHop.name      // Interface to send on
+                    );
+
+                    // update retry timestamp and increment times sent
+                    req.lastSent = std::chrono::steady_clock::now();
+                    req.timesSent++;
+                } else {
+                    // No routing entry was found
+                    std::cerr << "Route not found for destination: " << req.ip << std::endl;
+                }
             }
-         }
+        }
     }
 
-    // TODO: Your code should end here
+    // Your code should end here
 
     // Remove entries that have been in the cache for too long
     std::erase_if(entries, [this](const auto& entry) {
@@ -142,16 +169,16 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
 }
 
 // Helpers
-uint32_t extractSourceIp(const Packet& packet) {
-    // Ensure the packet is large enough to contain an Ethernet + IP header
-    constexpr size_t ethernetHeaderLength = sizeof(sr_ethernet_hdr_t);
-    if (packet.size() < ethernetHeaderLength + sizeof(sr_ip_hdr_t)) {
-        throw std::runtime_error("Packet too short to contain IP header");
-    }
+// uint32_t extractSourceIp(const Packet& packet) {
+//     // Ensure the packet is large enough to contain an Ethernet + IP header
+//     constexpr size_t ethernetHeaderLength = sizeof(sr_ethernet_hdr_t);
+//     if (packet.size() < ethernetHeaderLength + sizeof(sr_ip_hdr_t)) {
+//         throw std::runtime_error("Packet too short to contain IP header");
+//     }
 
-    // Skip the Ethernet header and cast to IP header
-    const sr_ip_hdr_t* ipHeader = reinterpret_cast<const sr_ip_hdr_t*>(packet.data() + ethernetHeaderLength);
+//     // Skip the Ethernet header and cast to IP header
+//     const sr_ip_hdr_t* ipHeader = reinterpret_cast<const sr_ip_hdr_t*>(packet.data() + ethernetHeaderLength);
 
-    // Return the source IP address
-    return ipHeader->ip_src;
-}
+//     // Return the source IP address
+//     return ipHeader->ip_src;
+// }

@@ -16,10 +16,6 @@ struct ArpEntry {
 struct AwaitingPacket {
   Packet packet;     /**< Packet that is awaiting the ARP response. */
   std::string iface; /**< Interface on which the packet came in */
-  /** Note: You don't have to use iface in this way; you can use it as the
-  interface that the packet came in, the interface the packet is going out on,
-  or even not use it at all. There are successful solutions that employ all
-  three of these approaches. */
 };
 
 struct ArpRequest {
@@ -57,10 +53,7 @@ public:
    address is resolved.
    * @param ip The IP address to which the packet should be sent.
    * @param packet The packet to send.
-   * @param iface An interface associated with the packet. This can either be
-   the interface the packet came in on or the interface the packet is going out
-   on; this depends on how you choose to use the AwaitingPacket struct in your
-   code. You should update this comment to reflect your choice.
+   * @param iface The interface the packet came in on.
    */
   virtual void queuePacket(uint32_t ip, const Packet &packet,
                            const std::string &iface) = 0;
