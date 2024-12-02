@@ -14,6 +14,8 @@ public:
     StaticRouter(std::unique_ptr<IArpCache> arpCache, std::shared_ptr<IRoutingTable> routingTable,
                  std::shared_ptr<IPacketSender> packetSender);
 
+    void handleARP(std::vector<uint8_t>& packet, std::string& iface, sr_ethernet_hdr_t* ethHeader);
+
     /**
      * @brief Handles an incoming packet, telling the switch to send out the necessary packets.
      * @param packet The incoming packet.
