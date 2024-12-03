@@ -7,7 +7,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
-
+#include <spdlog/spdlog.h>
 /**
  * @brief Handles sending ICMP messages.
  */
