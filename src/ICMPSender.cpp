@@ -2,6 +2,7 @@
 #include <cstring>
 #include "utils.h"
 #include "protocol.h"
+#include <spdlog/spdlog.h>
 
 ICMPSender::ICMPSender(std::shared_ptr<IPacketSender> packetSender)
     : packetSender_() {}
@@ -73,34 +74,20 @@ void ICMPSender::sendICMPEchoReply(const std::vector<uint8_t>& requestPacket, co
         return;
     }
 
-    // Create a new packet for the ICMP Echo Reply
-    size_t packetSize = requestPacket.size();
-    std::vector<uint8_t> replyPacket(packetSize);
+    // Prepare source and destination IP addresses for the reply
+    uint32_t destIP = ntohl(ipHeader->ip_src); // Destination is the original source IP
+    uint32_t replySourceIP = sourceIP; // Router's source IP
 
-    // Populate the Ethernet header
-    auto* replyEthHeader = reinterpret_cast<sr_ethernet_hdr_t*>(replyPacket.data());
-    memcpy(replyEthHeader->ether_dhost, ethHeader->ether_shost, ETHER_ADDR_LEN); // Set target MAC to requester's MAC
-    memcpy(replyEthHeader->ether_shost, ethHeader->ether_dhost, ETHER_ADDR_LEN); // Set source MAC to router's MAC
+    // Construct the ICMP Echo Reply packet
+    std::vector<uint8_t> icmpReplyPacket = constructICMPMessage(requestPacket, replySourceIP, destIP, 0 /* ICMP Type: Echo Reply */, 0 /* ICMP Code */);
+
+    // Update the Ethernet header
+    auto* replyEthHeader = reinterpret_cast<sr_ethernet_hdr_t*>(icmpReplyPacket.data());
+    memcpy(replyEthHeader->ether_dhost, ethHeader->ether_shost, ETHER_ADDR_LEN); // Target MAC is the requester's MAC
+    memcpy(replyEthHeader->ether_shost, ethHeader->ether_dhost, ETHER_ADDR_LEN); // Source MAC is the router's MAC
     replyEthHeader->ether_type = htons(ethertype_ip);
 
-    // Populate the IP header
-    auto* replyIPHeader = reinterpret_cast<sr_ip_hdr_t*>(replyPacket.data() + sizeof(sr_ethernet_hdr_t));
-    *replyIPHeader = *ipHeader; // Copy the original IP header
-    replyIPHeader->ip_dst = ipHeader->ip_src; // Swap source and destination IPs
-    replyIPHeader->ip_src = htonl(sourceIP);  // Set source IP to the router's IP
-    replyIPHeader->ip_ttl = 64; // Reset TTL
-    replyIPHeader->ip_sum = 0;  // Clear checksum for recalculation
-    replyIPHeader->ip_sum = cksum(replyIPHeader, sizeof(sr_ip_hdr_t)); // Recalculate checksum
-
-    // Populate the ICMP header
-    auto* replyICMPHeader = reinterpret_cast<sr_icmp_hdr_t*>(replyPacket.data() + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
-    memcpy(replyICMPHeader, icmpHeader, packetSize - sizeof(sr_ethernet_hdr_t) - sizeof(sr_ip_hdr_t)); // Copy ICMP payload
-    replyICMPHeader->icmp_type = 0; // Echo Reply
-    replyICMPHeader->icmp_code = 0; // Code 0 for Echo Reply
-    replyICMPHeader->icmp_sum = 0;  // Clear checksum for recalculation
-    replyICMPHeader->icmp_sum = cksum(replyICMPHeader, packetSize - sizeof(sr_ethernet_hdr_t) - sizeof(sr_ip_hdr_t)); // Recalculate checksum
-
-    // Send the ICMP Echo Reply
-    packetSender_->sendPacket(replyPacket, iface);
-    spdlog::info("ICMP Echo Reply sent to IP: {:#08x}", ntohl(ipHeader->ip_src));
+    // Send the packet
+    packetSender_->sendPacket(icmpReplyPacket, iface);
+    spdlog::info("ICMP Echo Reply sent to IP: {:#08x}", destIP);
 }
