@@ -21,6 +21,8 @@ public:
         // FRAGMENTATION_NEEDED = 4 // Fragmentation Needed (Code 4)
     };
 
+    void sendICMPEchoReply(const std::vector<uint8_t>& requestPacket, const std::string& iface, uint32_t sourceIP);
+
     /**
      * @brief Constructor for ICMPSender.
      * @param packetSender Shared pointer to the IPacketSender.
