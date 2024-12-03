@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "ARPSender.h"
 
 ARPSender::ARPSender(std::shared_ptr<IPacketSender> packetSender)

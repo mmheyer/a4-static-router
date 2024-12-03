@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "ICMPSender.h"
 
 ICMPSender::ICMPSender(std::shared_ptr<IPacketSender> packetSender)
