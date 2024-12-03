@@ -10,6 +10,7 @@
 #include <optional>
 #include <memory>
 #include <mutex>
+#include <cstring>
 
 #include "IArpCache.h"
 #include "IPacketSender.h"
@@ -51,7 +52,5 @@ private:
     std::unique_ptr<ICMPSender> icmpSender;
     std::unique_ptr<ARPSender> arpSender;
 };
-
-
 
 #endif //ARPCACHE_H

@@ -1,6 +1,10 @@
 #ifndef UTILS_RAW_H
 #define UTILS_RAW_H
 
+#pragma once
+#include <array>
+#include <string>
+
 #include <stdint.h>
 #include <netinet/in.h>
 
@@ -21,5 +25,6 @@ void print_hdr_arp(uint8_t *buf);
 /* prints all headers, starting from eth */
 void print_hdrs(uint8_t *buf, uint32_t length);
 
+std::string macToString(const std::array<uint8_t, 6>& mac);
 
 #endif //UTILS_RAW_H

@@ -1,8 +1,9 @@
 #include "utils.h"
+#include "protocol.h"
 
 #include <spdlog/spdlog.h>
-
-#include "protocol.h"
+#include <sstream>
+#include <iomanip>
 
 uint16_t cksum (const void *_data, int len) {
   const uint8_t *data = static_cast<const uint8_t*>(_data);
@@ -176,4 +177,15 @@ void print_hdrs(uint8_t* buf, uint32_t length) {
   else {
     spdlog::error("Unrecognized Ethernet Type: {}", ethtype);
   }
+}
+
+std::string macToString(const std::array<uint8_t, 6>& mac) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < mac.size(); ++i) {
+        if (i > 0) {
+            oss << ":";
+        }
+        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mac[i]);
+    }
+    return oss.str();
 }
