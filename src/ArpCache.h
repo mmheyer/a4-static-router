@@ -10,6 +10,7 @@
 #include <optional>
 #include <memory>
 #include <mutex>
+#include <cstring>
 
 #include "IArpCache.h"
 #include "IPacketSender.h"

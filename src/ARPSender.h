@@ -6,6 +6,9 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <cstring>
+#include "ICMPSender.h"
+
 
 /**
  * @brief Handles sending ARP messages.

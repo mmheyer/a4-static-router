@@ -37,34 +37,72 @@ RoutingTable::RoutingTable(const std::filesystem::path& routingTablePath) {
         routingEntries.push_back({dest_ip, gateway_ip, subnet_mask, iface});
     }
 }
-
 // Called when our router needs to determine how to forward an IP packet
 std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
-
-    uint32_t bestMatchLength = 0; // len of longest matching prefix, initially 0
+    uint32_t bestMatchLength = 0;  // len of longest matching prefix, initially 0
     std::optional<RoutingEntry> bestEntry = std::nullopt; // initially, no match 
+    uint32_t bestCloseness = UINT32_MAX; // used for ties
+
+    // convert input IP using host to network long
+    uint32_t ipNetworkOrder = htonl(ip);
 
     // for all entries in the routing table
     for (const auto& entry : routingEntries) {
         // apply the subnet mask to destination IP and input ip
         uint32_t maskedDest = entry.dest & entry.mask; // bitwise & desination IP and mask
-        uint32_t maskedIP = ip & entry.mask; // bitwise & input ip and mask
+        uint32_t maskedIP = ipNetworkOrder & entry.mask; // bitwise & input ip and mask
 
         // if maskedDest == maskedIP, the input ip falls within the entry's subnet mask
         // therefore, the input ip belongs to the same network as the routing entry
         if (maskedDest == maskedIP) {
             // count num of bits set to 1 (prefix length) in the subnet mask
-            uint32_t maskLength = __builtin_popcount(entry.mask);
-            // update best match if we found an entry with a longer prefix
-            if (maskLength > bestMatchLength) {
+            uint32_t maskLength = __builtin_popcount(ntohl(entry.mask)); // convert mask using network to host long for popcount
+
+            // resolve ties by prefering the entry where the input IP is closer to the entry's destination
+            uint32_t closeness = ntohl(ipNetworkOrder ^ maskedDest); // smaller val => closer match
+
+            // update best match if:
+            // 1. prefix length is longer OR
+            // 2. prefix length is the same, but the closeness is smaller
+            if (maskLength > bestMatchLength || (maskLength == bestMatchLength && closeness < bestCloseness)) {
                 bestMatchLength = maskLength;
+                bestCloseness = closeness;
                 bestEntry = entry;
             }
         }
     }
+
     // return std::nullopt if no match, otherwise return longest prefix match
     return bestEntry;
 }
+
+// Called when our router needs to determine how to forward an IP packet
+// std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
+
+//     uint32_t bestMatchLength = 0; // len of longest matching prefix, initially 0
+//     std::optional<RoutingEntry> bestEntry = std::nullopt; // initially, no match 
+
+//     // for all entries in the routing table
+//     for (const auto& entry : routingEntries) {
+//         // apply the subnet mask to destination IP and input ip
+//         uint32_t maskedDest = entry.dest & entry.mask; // bitwise & desination IP and mask
+//         uint32_t maskedIP = ip & entry.mask; // bitwise & input ip and mask
+
+//         // if maskedDest == maskedIP, the input ip falls within the entry's subnet mask
+//         // therefore, the input ip belongs to the same network as the routing entry
+//         if (maskedDest == maskedIP) {
+//             // count num of bits set to 1 (prefix length) in the subnet mask
+//             uint32_t maskLength = __builtin_popcount(entry.mask);
+//             // update best match if we found an entry with a longer prefix
+//             if (maskLength > bestMatchLength) {
+//                 bestMatchLength = maskLength;
+//                 bestEntry = entry;
+//             }
+//         }
+//     }
+//     // return std::nullopt if no match, otherwise return longest prefix match
+//     return bestEntry;
+// }
 
 RoutingInterface RoutingTable::getRoutingInterface(const std::string& iface) {
     return routingInterfaces.at(iface);
