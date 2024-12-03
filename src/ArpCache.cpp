@@ -36,6 +36,10 @@ void ArpCache::loop() {
 void ArpCache::tick() {
     std::unique_lock lock(mutex);
     // Your code here
+    auto logger = spdlog::get("arp_logger");
+    if (!logger) {
+        logger = spdlog::default_logger();
+    }
 
     // get the current time
     auto now = std::chrono::steady_clock::now();
@@ -48,6 +52,9 @@ void ArpCache::tick() {
         if (now - req.lastSent > std::chrono::seconds(1)) {
             // if the request has been sent more than 7 times
             if (req.timesSent >= 7) {
+                logger->warn("ARP request for IP {} failed after {} attempts. Sending ICMP Host Unreachable.",
+                             req.ip, req.timesSent);
+
                 // send ICMP "Destination Host Unreachable" to each packet's source
                 for (const auto& awaitingPacket : req.awaitingPackets) {
                     // extract original IP header
@@ -71,9 +78,14 @@ void ArpCache::tick() {
                 continue; // move to the next request
             // otherwise, retry sending ARP request
             } else {
+                logger->info("Retrying ARP request for IP {} (Attempt {}).", req.ip, req.timesSent + 1);
+                
                 // query the routing table to find the best route for the target IP
                 auto route = routingTable->getRoutingEntry(req.ip);
-                if (route) {
+                if (!route) {
+                    logger->error("No route found for IP {}.", req.ip);
+                    continue;
+                } else {
                     // an entry was found
                     RoutingEntry entry = *route;
                     
@@ -92,9 +104,6 @@ void ArpCache::tick() {
                     // update retry timestamp and increment times sent
                     req.lastSent = std::chrono::steady_clock::now();
                     req.timesSent++;
-                } else {
-                    // No routing entry was found
-                    std::cerr << "Route not found for destination: " << req.ip << std::endl;
                 }
             }
         }
@@ -104,8 +113,14 @@ void ArpCache::tick() {
 
     // Remove entries that have been in the cache for too long
     std::erase_if(entries, [this](const auto& entry) {
-        return std::chrono::steady_clock::now() - entry.second.timeAdded >= timeout;
+        bool expired = std::chrono::steady_clock::now() - entry.second.timeAdded >= timeout;
+        if (expired) {
+            logger->info("Removing expired ARP cache entry for IP {}.", entry.first);
+        }
+        return expired;
     });
+
+    logger->info("Finished processing ARP requests and cache maintenance.");
 }
 
 void ArpCache::addEntry(uint32_t ip, const mac_addr& mac) {
@@ -167,18 +182,3 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
     }
 
 }
-
-// Helpers
-// uint32_t extractSourceIp(const Packet& packet) {
-//     // Ensure the packet is large enough to contain an Ethernet + IP header
-//     constexpr size_t ethernetHeaderLength = sizeof(sr_ethernet_hdr_t);
-//     if (packet.size() < ethernetHeaderLength + sizeof(sr_ip_hdr_t)) {
-//         throw std::runtime_error("Packet too short to contain IP header");
-//     }
-
-//     // Skip the Ethernet header and cast to IP header
-//     const sr_ip_hdr_t* ipHeader = reinterpret_cast<const sr_ip_hdr_t*>(packet.data() + ethernetHeaderLength);
-
-//     // Return the source IP address
-//     return ipHeader->ip_src;
-// }

@@ -1,4 +1,5 @@
 #include "ICMPSender.h"
+#include "utils.h"
 
 ICMPSender::ICMPSender(std::shared_ptr<IPacketSender> packetSender)
     : packetSender_() {}
@@ -40,12 +41,12 @@ std::vector<uint8_t> ICMPSender::constructICMPMessage(const std::vector<uint8_t>
     ipHeader->ip_p = ip_protocol_icmp;
     ipHeader->ip_src = htonl(sourceIP);
     ipHeader->ip_dst = htonl(destIP);
-    ipHeader->ip_sum = 0; // Assume checksum calculation done elsewhere
+    ipHeader->ip_sum = cksum(ipHeader, sizeof(sr_ip_hdr_t));
 
     // Populate ICMP header
     icmpHeader->icmp_type = icmpType;
     icmpHeader->icmp_code = icmpCode;
-    icmpHeader->icmp_sum = 0; // Assume checksum calculation done elsewhere
+    icmpHeader->icmp_sum = cksum(icmpHeader, sizeof(sr_icmp_t3_hdr_t));
     memcpy(icmpHeader->data, originalPacket.data(), std::min(ICMP_DATA_SIZE, static_cast<int>(originalPacket.size())));
 
     // Calculate checksum (not implemented here)

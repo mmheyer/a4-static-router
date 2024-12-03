@@ -52,6 +52,4 @@ private:
     std::unique_ptr<ARPSender> arpSender;
 };
 
-
-
 #endif //ARPCACHE_H
