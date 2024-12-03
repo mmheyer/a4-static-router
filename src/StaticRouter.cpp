@@ -6,6 +6,7 @@
 #include "protocol.h"
 #include "utils.h"
 #include "RoutingTable.h"
+#include "ICMPSender.h"
 
 StaticRouter::StaticRouter(std::unique_ptr<IArpCache> arpCache, std::shared_ptr<IRoutingTable> routingTable,
                            std::shared_ptr<IPacketSender> packetSender)
