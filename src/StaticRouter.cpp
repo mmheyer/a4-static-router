@@ -47,7 +47,9 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
 
 }
 
+
 void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, sr_ethernet_hdr_t *ethHeader){
+    std::cout << "handleARP" << std::endl;
     //constexpr inline size_t ARP_PACKET_SIZE = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
     if(packet.size() < sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t)){
         spdlog::error("Packet not large enough to contain ARP.");
@@ -55,16 +57,36 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
     }
 
     auto *arpHeader = reinterpret_cast<sr_arp_hdr_t *>(packet.data() + sizeof(sr_ethernet_hdr_t));
+    // Print ARP header information
+    std::cout << "\n *** ARP Header ***" << std::endl;
+    std::cout << "ARP Operation: " << std::hex << ntohs(arpHeader->ar_op) << std::dec << std::endl;
+    std::cout << "Sender MAC: "; 
+    for (int i = 0; i < ETHER_ADDR_LEN; i++) {
+        std::cout << std::hex << (int)arpHeader->ar_sha[i] << (i < ETHER_ADDR_LEN - 1 ? ":" : "");
+    }
+    std::cout << std::endl;
+    std::cout << "Sender IP: " << std::dec << ntohl(arpHeader->ar_sip) << std::endl;
+    std::cout << "Target MAC: ";
+    for (int i = 0; i < ETHER_ADDR_LEN; i++) {
+        std::cout << std::hex << (int)arpHeader->ar_tha[i] << (i < ETHER_ADDR_LEN - 1 ? ":" : "");
+    }
+    std::cout << std::endl;
+    std::cout << "Target IP: " <<  std::dec << ntohl(arpHeader->ar_tip) << std::endl;
+
+    
+    
     unsigned short op = ntohs(arpHeader->ar_op);
     std::array<unsigned char, 6> macAddr;
     std::copy(std::begin(arpHeader->ar_sha), std::end(arpHeader->ar_sha), macAddr.begin());
 
     if(op == arp_op_reply){
+        std::cout << "REPLY" << std::endl;
         spdlog::info("Received ARP reply.");
         //  virtual void addEntry(uint32_t ip, const mac_addr &mac) = 0;
         arpCache->addEntry(arpHeader->ar_sip, macAddr);
         spdlog::info("ARP cache updated with IP: {:#08x}", ntohl(arpHeader->ar_sip));
     } else if(op == arp_op_request){
+        std::cout << "REQUEST" << std::endl;
         spdlog::info("Received ARP Request");
         //get ip 
         //TODO FIX::: 
@@ -76,7 +98,7 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
         RoutingEntry routerIp = *x;
         
 
-
+        std::cout << "Route found :) " << std::endl;
         spdlog::info("This router owns the requested IP.");
         //arp reply 
         // Construct ARP reply packet
@@ -84,9 +106,9 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
         auto *replyEthH = reinterpret_cast<sr_ethernet_hdr_t *>(reply.data());
         auto *replyArpH = reinterpret_cast<sr_arp_hdr_t *>(reply.data() + sizeof(sr_ethernet_hdr_t));
 
-        std::memcpy(replyEthH->ether_dhost, ethHeader->ether_shost, ETHER_ADDR_LEN); // Target (source of the request)
         //TODO FIXXX
         RoutingInterface RI = routingTable->getRoutingInterface(iface);                 // Source(router's MAC for the interface)
+        std::memcpy(replyEthH->ether_dhost, arpHeader->ar_sha, ETHER_ADDR_LEN); // Target (source of the request)
         std::memcpy(replyEthH->ether_shost, RI.mac.data(), ETHER_ADDR_LEN); // (router's MAC)
 
         replyEthH->ether_type = htons(ethertype_arp);
@@ -95,20 +117,44 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
         replyArpH->ar_hrd = htons(arp_hrd_ethernet); 
         replyArpH->ar_pro = htons(ethertype_ip);
         replyArpH->ar_hln = ETHER_ADDR_LEN;
-        replyArpH->ar_pln = sizeof(in_addr);
+        replyArpH->ar_pln = 4;
+
         std::memcpy(replyArpH->ar_sha, replyEthH->ether_shost, ETHER_ADDR_LEN);
-        replyArpH->ar_sip = htonl(routerIp.dest); 
         std::memcpy(replyArpH->ar_tha, arpHeader->ar_sha, ETHER_ADDR_LEN);
         replyArpH->ar_tip = arpHeader->ar_sip; 
+        replyArpH->ar_sip = arpHeader->ar_tip;
 
+        std::cout << "iface info for reply" << std::endl;
+        std::cout << "name: " << iface << std::endl;
+
+                std::cout << "\n *** RESPONSE PACKET: ARP Header ***" << std::endl;
+                std::cout << "ARP Operation: " << std::hex << ntohs(replyArpH->ar_op) << std::dec << std::endl;
+                std::cout << "Sender MAC: ";
+                for (int i = 0; i < ETHER_ADDR_LEN; i++) {
+                    std::cout << std::hex << (int)replyArpH->ar_sha[i] << (i < ETHER_ADDR_LEN - 1 ? ":" : "");
+                }
+                std::cout << std::endl;
+                std::cout << "Sender IP: " << std::dec << ntohl(replyArpH->ar_sip) << std::endl;
+                std::cout << "Target MAC: ";
+                for (int i = 0; i < ETHER_ADDR_LEN; i++) {
+                    std::cout << std::hex << (int)replyArpH->ar_tha[i] << (i < ETHER_ADDR_LEN - 1 ? ":" : "");
+                }
+                std::cout << std::endl;
+                std::cout << "Target IP: " << std::dec << ntohl(replyArpH->ar_tip) << std::endl;
+
+                
         // Send ARP reply
+        
         packetSender->sendPacket(reply, iface);
         spdlog::info("ARP reply sent to IP: {:#08x}", ntohl(arpHeader->ar_sip));
+        std::cout << "reply sent" << std::endl;
 
     } else{
          spdlog::error("Unsupported ARP Op: {:#06x}", ntohs(arpHeader->ar_op));
     }
 }
+
+
 
 void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader) {
     // Check if packet contains an IP header
@@ -181,13 +227,33 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
 
 void StaticRouter::handleICMPEchoRequest(std::vector<uint8_t>& packet, const std::string& iface,
                                          sr_ethernet_hdr_t* ethHeader) {
-    // Extract ICMP header and validate
+    //  ICMP header and validate
+    std::cout << "ICMP ECHO" << std::endl;
     auto* icmpHeader = reinterpret_cast<sr_icmp_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
-    if (icmpHeader->icmp_type != 8 /* Echo Request */) {
+    if (icmpHeader->icmp_type != 8 ) {// /Echo Request 
         spdlog::error("Unsupported ICMP type. Dropping packet.");
         return;
     }
 
-    // Construct and send ICMP Echo Reply
-    icmpSender->sendICMPEchoReply(packet, iface, ntohl(reinterpret_cast<sr_ip_hdr_t*>(ethHeader + 1)->ip_src));
+    //  ICMP Echo Reply
+    auto* ipHeader = reinterpret_cast<sr_ip_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t));
+    
+    uint32_t tempIP = ipHeader->ip_src;
+    ipHeader->ip_src = ipHeader->ip_dst;
+    ipHeader->ip_dst = tempIP; // swap source and destination IPs
+
+    ipHeader->ip_ttl = 64; // reset TTL
+    ipHeader->ip_sum = 0; //  IP checksum
+    ipHeader->ip_sum = cksum(reinterpret_cast<uint16_t*>(ipHeader), sizeof(sr_ip_hdr_t));
+
+    icmpHeader->icmp_type = 0; //  Reply
+    icmpHeader->icmp_code = 0; 
+    icmpHeader->icmp_sum = 0; // clear checksum field
+    size_t icmpPayloadSize = packet.size() - (sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+    icmpHeader->icmp_sum = cksum(reinterpret_cast<uint16_t*>(icmpHeader), icmpPayloadSize);
+
+    //  Ethernet header
+    std::swap(ethHeader->ether_dhost, ethHeader->ether_shost); // swap MAC addresses
+
+    packetSender->sendPacket(packet, iface);
 }
