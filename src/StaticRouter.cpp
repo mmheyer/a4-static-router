@@ -38,9 +38,9 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
 
     if(etype == ethertype_arp){
         handleARP(packet, iface, ethHeader);
-    } //else if(etype == ethertype_ip){
-   //     handleIP(packet, iface, ethHeader);
-   // } 
+    } else if(etype == ethertype_ip){
+       handleIP(packet, iface, ethHeader);
+    } 
    else{
         spdlog::error("Unsupported EtherType: {:#06x}", etype);
     }
