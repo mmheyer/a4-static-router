@@ -46,11 +46,11 @@ std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
 
     // for all entries in the routing table
     for (const auto& entry : routingEntries) {
-        spdlog::debug("Checking entry: dest={:#010x}, mask={:#010x}, gateway={:#010x}, iface={}", entry.dest, entry.mask, entry.gateway, entry.iface);
+        spdlog::info("Checking entry: dest={:#010x}, mask={:#010x}, gateway={:#010x}, iface={}", entry.dest, entry.mask, entry.gateway, entry.iface);
         // apply the subnet mask to destination IP and input ip
         uint32_t maskedDest = ntohl(entry.dest) & ntohl(entry.mask); // bitwise & desination IP and mask
         uint32_t maskedIP = ntohl(ip) & ntohl(entry.mask); // bitwise & input ip and mask
-        spdlog::debug("Masked destination: {:#010x}, Masked input: {:#010x}", maskedDest, maskedIP);
+        spdlog::info("Masked destination: {:#010x}, Masked input: {:#010x}", maskedDest, maskedIP);
         // if maskedDest == maskedIP, the input ip falls within the entry's subnet mask
         // therefore, the input ip belongs to the same network as the routing entry
         if (maskedDest == maskedIP) {
@@ -60,7 +60,7 @@ std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
             // resolve ties by prefering the entry where the input IP is closer to the entry's destination
             //uint32_t closeness = ntohl(ipNetworkOrder ^ maskedDest); // smaller val => closer match
             //uint32_t closeness = ip ^ maskedDest;
-            spdlog::debug("Match found: maskLength={}", maskLength);
+            spdlog::info("Match found: maskLength={}", maskLength);
             // update best match if:
             // 1. prefix length is longer OR
             // 2. (TOOK THIS PART OUT, NOT NEEDED) prefix length is the same, but the closeness is smaller
@@ -70,7 +70,7 @@ std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
                 bestEntry = entry;
             }
         } else {
-            spdlog::debug("No match for entry: dest={:#010x}, mask={:#010x}", entry.dest, entry.mask);
+            spdlog::info("No match for entry: dest={:#010x}, mask={:#010x}", entry.dest, entry.mask);
         }
     }
 
