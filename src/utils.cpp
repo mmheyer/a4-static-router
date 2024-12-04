@@ -189,3 +189,19 @@ std::string macToString(const std::array<uint8_t, 6>& mac) {
     }
     return oss.str();
 }
+
+uint32_t extractSourceIP(const std::vector<uint8_t>& packet) {
+    if (packet.size() < 20) {
+        spdlog::error("Packet is too small to contain an IP header.");
+    }
+
+    // The source IP starts at offset 12 in the IP header
+    const uint8_t* ipHeader = packet.data();
+    uint32_t srcIP;
+
+    // Copy the 4 bytes of the source IP address
+    std::memcpy(&srcIP, ipHeader + 12, sizeof(srcIP));
+
+    // Convert to host byte order
+    return ntohl(srcIP);
+}

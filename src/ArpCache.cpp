@@ -52,11 +52,39 @@ void ArpCache::tick() {
                 logger->warn("ARP request for IP {} failed after {} attempts. Sending ICMP Host Unreachable.", req.ip, req.timesSent);
 
                 for (const auto& awaitingPacket : req.awaitingPackets) {
-                    uint32_t srcIp = routingTable->getRoutingInterface(awaitingPacket.iface).ip;
+                    // 1. extract source ip from awaiting packet
+                    try {
+                        uint32_t sourceIP = extractSourceIP(awaitingPacket.packet);
+
+                        // Convert the source IP to a human-readable string (optional)
+                        spdlog::debug("Source IP: {}.{}.{}.{}\n",
+                            (sourceIP >> 24) & 0xFF,
+                            (sourceIP >> 16) & 0xFF,
+                            (sourceIP >> 8) & 0xFF,
+                            sourceIP & 0xFF);
+
+                        
+                    // TODO: finish steps 2-4
+                    // 2. use longest prefix match to find interface
+                    auto entry = routingTable->getRoutingEntry(sourceIP);
+                    if (!entry) {
+                        spdlog::error("No routing entry for IP {}", sourceIP);
+                        continue;
+                    }
+                    auto iface = routingTable->getRoutingInterface(entry.value().iface);
+
+                    // 3. extract mac and ip of interface
+                    ifaceMac = entry.
+
+                    // 4. use to assign to icmp, ip, and ethernet headers
                     icmpSender->sendDestinationUnreachable(
                         awaitingPacket.packet, awaitingPacket.iface, srcIp,
                         static_cast<uint8_t>(ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE)
                     );
+                    } catch (const std::exception& e) {
+                        // std::cerr << "Error extracting source IP: " << e.what() << std::endl;
+                        spdlog::error("Error extracting source IP: {}\n", e.what());
+                    }
                 }
 
                 reqIt = requests.erase(reqIt);
@@ -71,10 +99,15 @@ void ArpCache::tick() {
                     continue;
                 }
 
+<<<<<<< Updated upstream
                 auto nextHop = routingTable->getRoutingInterface(route->iface);
                 std::cout << "*************************************************************************TICK" << std::endl;
                 arpSender->sendArpRequest(req.ip, nextHop.ip, nextHop.mac.data(), nextHop.name);
                 std::cout << "*************************************************************************TICK END" << std::endl;
+=======
+                auto iface = routingTable->getRoutingInterface(route->iface);
+                arpSender->sendArpRequest(req.ip, iface.ip, iface.mac.data(), iface.name);
+>>>>>>> Stashed changes
 
                 req.lastSent = std::chrono::steady_clock::now();
                 req.timesSent++;

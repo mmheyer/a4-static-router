@@ -3,6 +3,10 @@
 #include <spdlog/spdlog.h>
 #include <cstring>
 #include <iostream>
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 #include "protocol.h"
 #include "utils.h"
 #include "RoutingTable.h"
@@ -227,9 +231,15 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
 
 void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface,
                                    sr_ethernet_hdr_t* ethHeader, sr_ip_hdr_t* ipHeader) {
+<<<<<<< Updated upstream
     std::cout << "FORWARD IP" << std::endl;
     ICMPSender icmpSender(packetSender);
     std::shared_ptr<ARPSender> arpSender;
+=======
+
+    // TODO: log addresses of pointers
+
+>>>>>>> Stashed changes
     // Decrement TTL and recompute checksum
     ipHeader->ip_ttl--;
     if (ipHeader->ip_ttl == 0) {
@@ -250,7 +260,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     auto nextHopMAC = arpCache->getEntry(route->gateway);
     if (nextHopMAC) {
         // Update Ethernet header with next-hop MAC and router's MAC
-        std::memcpy(ethHeader->ether_dhost, nextHopMAC->data(), ETHER_ADDR_LEN);
+        std::memcpy(ethHeader->ether_dhost, nextHopMAC->data(), ETHER_ADDR_LEN); // check this for seg fault
         std::memcpy(ethHeader->ether_shost, routingTable->getRoutingInterface(route->iface).mac.data(), ETHER_ADDR_LEN);
         packetSender->sendPacket(packet, route->iface);
     } else {

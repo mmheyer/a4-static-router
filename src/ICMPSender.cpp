@@ -33,6 +33,8 @@ std::vector<uint8_t> ICMPSender::constructICMPMessage(const std::vector<uint8_t>
     auto* ipHeader = reinterpret_cast<sr_ip_hdr_t*>(message.data());
     auto* icmpHeader = reinterpret_cast<sr_icmp_t3_hdr_t*>(message.data() + sizeof(sr_ip_hdr_t));
 
+    // Need to change ethernet header as well
+
     // Populate IP header
     ipHeader->ip_v = 4;
     ipHeader->ip_hl = 5;
