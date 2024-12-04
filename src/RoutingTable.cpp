@@ -48,8 +48,8 @@ std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
     for (const auto& entry : routingEntries) {
         spdlog::info("Checking entry: dest={:#010x}, mask={:#010x}, gateway={:#010x}, iface={}", entry.dest, entry.mask, entry.gateway, entry.iface);
         // apply the subnet mask to destination IP and input ip
-        uint32_t maskedDest = ntohl(entry.dest) & ntohl(entry.mask); // bitwise & desination IP and mask
-        uint32_t maskedIP = ntohl(ip) & ntohl(entry.mask); // bitwise & input ip and mask
+        uint32_t maskedDest = entry.dest & entry.mask; // bitwise & desination IP and mask
+        uint32_t maskedIP = ntohl(ip) & entry.mask; // bitwise & input ip and mask
         spdlog::info("Masked destination: {:#010x}, Masked input: {:#010x}", maskedDest, maskedIP);
         // if maskedDest == maskedIP, the input ip falls within the entry's subnet mask
         // therefore, the input ip belongs to the same network as the routing entry
