@@ -72,7 +72,9 @@ void ArpCache::tick() {
                 }
 
                 auto nextHop = routingTable->getRoutingInterface(route->iface);
+                std::cout << "*************************************************************************TICK" << std::endl;
                 arpSender->sendArpRequest(req.ip, nextHop.ip, nextHop.mac.data(), nextHop.name);
+                std::cout << "*************************************************************************TICK END" << std::endl;
 
                 req.lastSent = std::chrono::steady_clock::now();
                 req.timesSent++;
