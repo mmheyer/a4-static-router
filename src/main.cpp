@@ -20,21 +20,9 @@ void initializeLogging() {
     }
 }
 
-void initializeRoutingTableLogging() {
-    try {
-        // Create a rotating file logger for RoutingTable
-        auto routingTableLogger = spdlog::rotating_logger_mt(
-            "routing_table_logger", "logs/routing_table.log", 1048576 * 5, 3); // 5MB log file, 3 rotations
-        routingTableLogger->set_level(spdlog::level::info);                    // Set log level to info
-        routingTableLogger->flush_on(spdlog::level::info);                     // Flush on info level
-        spdlog::set_default_logger(routingTableLogger);                           // Register the logger (optional)
-    } catch (const spdlog::spdlog_ex& ex) {
-        std::cerr << "RoutingTable log initialization failed: " << ex.what() << std::endl;
-    }
-}
-
 int main(int argc, char **argv)
 {
+    std::cout << "starting program" << std::endl;
     cxxopts::Options options("StaticRouter", "Static Router for EECS 489 P4");
     options.add_options()
         ("h,help", "Print help")
@@ -45,8 +33,8 @@ int main(int argc, char **argv)
 
     // initialize logger
     initializeLogging();
-    initializeRoutingTableLogging();
 
     BridgeClient client(result["routing-table"].as<std::string>(), result["pcap-prefix"].as<std::string>());
+    std::cout << "client run" << std::endl;
     client.run();
 }

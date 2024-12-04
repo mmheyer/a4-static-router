@@ -7,8 +7,7 @@
 #include "IArpCache.h"
 #include "IPacketSender.h"
 #include "IRoutingTable.h"
-#include "ICMPSender.h"
-#include "ARPSender.h"
+
 
 
 class StaticRouter {
@@ -35,7 +34,7 @@ private:
     std::shared_ptr<IPacketSender> packetSender; // Interface for sending packets
     std::unique_ptr<IArpCache> arpCache; // ARP cache for resolving ip-to-mac mappings
 
-  
+    
 };
 
 

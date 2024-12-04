@@ -3,10 +3,6 @@
 #include <spdlog/spdlog.h>
 #include <cstring>
 #include <iostream>
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 #include "protocol.h"
 #include "utils.h"
 #include "RoutingTable.h"
@@ -20,7 +16,6 @@ StaticRouter::StaticRouter(std::unique_ptr<IArpCache> arpCache, std::shared_ptr<
 {
 }
 
-//DONE
 void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
 {
     std::unique_lock lock(mutex);
@@ -79,8 +74,7 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
     }
 
 }
- 
-//DONE
+
 void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, sr_ethernet_hdr_t *ethHeader){
     std::cout << "handleARP" << std::endl;
     //constexpr inline size_t ARP_PACKET_SIZE = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
@@ -93,7 +87,7 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
     // Print ARP header information
     std::cout << "\n *** ARP Header ***" << std::endl;
     std::cout << "ARP Operation: " << std::hex << ntohs(arpHeader->ar_op) << std::dec << std::endl;
-    std::cout << "Sender MAC: "; 
+    std::cout << "Sender MAC: ";
     for (int i = 0; i < ETHER_ADDR_LEN; i++) {
         std::cout << std::hex << (int)arpHeader->ar_sha[i] << (i < ETHER_ADDR_LEN - 1 ? ":" : "");
     }
@@ -124,11 +118,13 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
         //get ip 
         //TODO FIX::: 
         auto x = routingTable->getRoutingEntry(ntohl(arpHeader->ar_tip));
-        if (!x) {
-            spdlog::info("No route found for the requested IP: {:#08x}. Ignoring ARP request.", ntohl(arpHeader->ar_tip));
-            return;
-        }
         RoutingEntry routerIp = *x;
+        std::cout << routerIp.dest << std::endl;
+        //TODO dest unreachable
+       /*if(!x){
+            std::cout << "Dest Unreachable" << std::endl;
+            return;
+        }*/
         
 
         std::cout << "Route found :) " << std::endl;
@@ -190,7 +186,6 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
 
 void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader) {
     std::cout << "[IP] handleIP" << std::endl;
-    ICMPSender icmpSender(packetSender);
     // Check if packet contains an IP header
     if (packet.size() < sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)) {
         spdlog::error("Packet is too small to contain an IP header.");
@@ -214,30 +209,46 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     std::cout << "[IP Header] Destination IP: " << (int)(ipHeader->ip_dst) << std::endl;
     std::cout << "[IP Header] Protocol: " << (int)(ipHeader->ip_p) << std::endl;
     std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
-    
     // Check if the destination IP matches one of the router's interfaces
+    // Check if the destination IP matches one of the router's interfaces
+   /* for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
+        if (ifaceInfo.ip == ntohl(ipHeader->ip_dst)) {
+            if (ipHeader->ip_p == ip_protocol_icmp) {
+                // Handle ICMP Echo Request
+                handleICMPEchoRequest(packet, iface, ethHeader);
+            } else {
+                // Send ICMP Port Unreachable
+                icmpSender->sendDestinationUnreachable(packet, iface, ifaceInfo.ip, 3);
+            }
+            return;
+        }
+    }*/
+    // Forward the packet   
+
+   
 
     
-
-    // Check if the destination IP matches one of the router's interfaces
- 
-     std::cout << "[handle ip] echoooo" << std::endl;
     handleICMPEchoRequest(packet, iface, ethHeader);
+
 }
-
-
-
-//TODO
 
 void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface,
                                    sr_ethernet_hdr_t* ethHeader, sr_ip_hdr_t* ipHeader) {
-    std::cout << "FORWARD IP" << std::endl;
-    ICMPSender icmpSender(packetSender);
-    std::shared_ptr<ARPSender> arpSender;
+    std::cout << "*** wip in forwardip packet" << std::endl;
+
+/*
+    // Print IP header (assuming sr_ip_hdr_t is a struct with IP addresses and protocol)
+    std::cout << "[IP Header] Source IP: " << (int)(ipHeader->ip_src)<< std::endl;
+    std::cout << "[IP Header] Destination IP: " << (int)(ipHeader->ip_dst) << std::endl;
+    std::cout << "[IP Header] Protocol: " << (int)(ipHeader->ip_p) << std::endl;
+    std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
+
+    
     // Decrement TTL and recompute checksum
     ipHeader->ip_ttl--;
     if (ipHeader->ip_ttl == 0) {
-        icmpSender.sendTimeExceeded(packet, iface, ntohl(ipHeader->ip_src));
+        std::cout << "[FORWARD IP] ttl = 0" << std::endl;
+        icmpSender->sendTimeExceeded(packet, iface, ntohl(ipHeader->ip_src));
         return;
     }
     ipHeader->ip_sum = 0;
@@ -246,27 +257,35 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     // Lookup routing table
     auto route = routingTable->getRoutingEntry(ntohl(ipHeader->ip_dst));
     if (!route) {
-        icmpSender.sendDestinationUnreachable(packet, iface, ntohl(ipHeader->ip_src), 0 /* Network Unreachable */);
+        std::cout << "[FORWARD IP] dest unreachable in forwarding" << std::endl;
+        icmpSender->sendDestinationUnreachable(packet, iface, ntohl(ipHeader->ip_src), 0 ); // Network Unreachable 
         return;
     }
+    std::cout << "[FORWARD IP] forwarding route found" << std::endl;
 
     // Check ARP cache for next-hop MAC
     auto nextHopMAC = arpCache->getEntry(route->gateway);
     if (nextHopMAC) {
+        std::cout << "[FORWARD IP] next hop" << std::endl;
         // Update Ethernet header with next-hop MAC and router's MAC
-        std::memcpy(ethHeader->ether_dhost, nextHopMAC->data(), ETHER_ADDR_LEN); // check this for seg fault
+        std::memcpy(ethHeader->ether_dhost, nextHopMAC->data(), ETHER_ADDR_LEN);
         std::memcpy(ethHeader->ether_shost, routingTable->getRoutingInterface(route->iface).mac.data(), ETHER_ADDR_LEN);
+        std::cout << "next hop pkt sent" << std::endl;
         packetSender->sendPacket(packet, route->iface);
     } else {
+        std::cout << "[FORWARD IP] queue" << std::endl;
         // Queue the packet and send ARP request
-        std::cout << "TODO QUEUE AND SEND PACKET" << std::endl;
-      //  arpCache->queuePacket(route->gateway, packet, route->iface);
-       // arpSender->sendArpRequest(route->gateway, routingTable->getRoutingInterface(route->iface).ip,
-                                 // routingTable->getRoutingInterface(route->iface).mac.data(), route->iface);
-    }
+        arpCache->queuePacket(route->gateway, packet, route->iface);
+        std::cout << "[FORWARD IP] send arp req" << std::endl;
+        std::cout << "------------------------------------------------FORWARDIP" << std::endl;
+        arpSender->sendArpRequest(route->gateway, routingTable->getRoutingInterface(route->iface).ip,
+                                 routingTable->getRoutingInterface(route->iface).mac.data(), route->iface);
+        std::cout << "------------------------------------------------FORWARDIP END" << std::endl;
+
+      
+    }*/
 }
 
-//done
 void StaticRouter::handleICMPEchoRequest(std::vector<uint8_t>& packet, const std::string& iface,
                                          sr_ethernet_hdr_t* ethHeader) {
     //  ICMP header and validate
