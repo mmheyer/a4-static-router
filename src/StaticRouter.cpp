@@ -231,15 +231,9 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
 
 void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface,
                                    sr_ethernet_hdr_t* ethHeader, sr_ip_hdr_t* ipHeader) {
-<<<<<<< Updated upstream
     std::cout << "FORWARD IP" << std::endl;
     ICMPSender icmpSender(packetSender);
     std::shared_ptr<ARPSender> arpSender;
-=======
-
-    // TODO: log addresses of pointers
-
->>>>>>> Stashed changes
     // Decrement TTL and recompute checksum
     ipHeader->ip_ttl--;
     if (ipHeader->ip_ttl == 0) {
