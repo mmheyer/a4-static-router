@@ -4,7 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <spdlog/spdlog.h>
-
+#include <iostream>
 RoutingTable::RoutingTable(const std::filesystem::path& routingTablePath) {
     if (!std::filesystem::exists(routingTablePath)) {
         throw std::runtime_error("Routing table file does not exist");
@@ -39,50 +39,47 @@ RoutingTable::RoutingTable(const std::filesystem::path& routingTablePath) {
 }
 // Called when our router needs to determine how to forward an IP packet
 std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
-    uint32_t bestMatchLength = 0;  // len of longest matching prefix, initially 0
-    std::optional<RoutingEntry> bestEntry = std::nullopt; // initially, no match 
-    //uint32_t bestCloseness = UINT32_MAX; // used for ties
-    spdlog::info("Starting getRoutingEntry for IP: {:#010x}", ip);
+    RoutingEntry bestMatch;
+    int longestPrefixMatch = -1;
 
-    // for all entries in the routing table
+    if (routingEntries.empty()) {
+        return std::nullopt;
+    }
+
+    uint32_t ip_network_order = ntohl(ip);
+
     for (const auto& entry : routingEntries) {
-        spdlog::info("Checking entry: dest={:#010x}, mask={:#010x}, gateway={:#010x}, iface={}", entry.dest, entry.mask, entry.gateway, entry.iface);
-        // apply the subnet mask to destination IP and input ip
-        uint32_t maskedDest = ntohl(entry.dest) & ntohl(entry.mask); // bitwise & desination IP and mask
-        uint32_t maskedIP = ntohl(ip) & ntohl(entry.mask); // bitwise & input ip and mask
-        spdlog::info("Masked destination: {:#010x}, Masked input: {:#010x}", maskedDest, maskedIP);
-        // if maskedDest == maskedIP, the input ip falls within the entry's subnet mask
-        // therefore, the input ip belongs to the same network as the routing entry
-        if (maskedDest == maskedIP) {
-            // count num of bits set to 1 (prefix length) in the subnet mask
-            uint32_t maskLength = __builtin_popcount(ntohl(entry.mask)); // convert mask using network to host long for popcount
-            //uint32_t maskLength = __builtin_popcount(entry.mask);
-            // resolve ties by prefering the entry where the input IP is closer to the entry's destination
-            //uint32_t closeness = ntohl(ipNetworkOrder ^ maskedDest); // smaller val => closer match
-            //uint32_t closeness = ip ^ maskedDest;
-            spdlog::info("Match found: maskLength={}", maskLength);
-            // update best match if:
-            // 1. prefix length is longer OR
-            // 2. (TOOK THIS PART OUT, NOT NEEDED) prefix length is the same, but the closeness is smaller
-            if (maskLength > bestMatchLength) {  // || (maskLength == bestMatchLength && closeness < bestCloseness)) {
-                spdlog::info("New best match: dest={:#010x}, mask={:#010x}, gateway={:#010x}, iface={}", entry.dest, entry.mask, entry.gateway, entry.iface);
-                bestMatchLength = maskLength;
-                bestEntry = entry;
+        uint32_t dest_ip_host_order = ntohl(entry.dest);
+        uint32_t mask_host_order = ntohl(entry.mask);
+
+        uint32_t network = dest_ip_host_order & mask_host_order;
+        uint32_t ip_network = ip_network_order & mask_host_order;
+std::cout << "Dest IP: " << inet_ntoa(*(in_addr*)&dest_ip_host_order) 
+                  << " | Mask: " << inet_ntoa(*(in_addr*)&mask_host_order) 
+                  << " | Network: " << inet_ntoa(*(in_addr*)&network) 
+                  << " | IP: " << inet_ntoa(*(in_addr*)&ip_network_order) 
+                  << std::endl;
+        if (network == ip_network) {
+            int prefixLength = 0;
+            uint32_t mask = entry.mask;
+            while (mask) {
+                prefixLength++;
+                mask >>= 1;
             }
-        } else {
-            spdlog::info("No match for entry: dest={:#010x}, mask={:#010x}", entry.dest, entry.mask);
+
+            if (prefixLength > longestPrefixMatch) {
+                longestPrefixMatch = prefixLength;
+                std::cout << "best match" << std::endl;
+                bestMatch = entry;
+            }
         }
     }
 
-    if (bestEntry) {
-        spdlog::info("Best match found: dest={:#010x}, mask={:#010x}, gateway={:#010x}, iface={}",
-                     bestEntry->dest, bestEntry->mask, bestEntry->gateway, bestEntry->iface);
-    } else {
-        spdlog::warn("No matching entry found for IP: {:#010x}", ip);
+    if (longestPrefixMatch != -1) {
+        return bestMatch;
     }
 
-    // return std::nullopt if no match, otherwise return longest prefix match
-    return bestEntry;
+    return std::nullopt;  // No match found
 }
 
 // Called when our router needs to determine how to forward an IP packet
