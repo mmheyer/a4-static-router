@@ -31,4 +31,8 @@ uint32_t extractSourceIP(const std::vector<uint8_t>& packet);
 uint32_t extractDestinationIP(const std::vector<uint8_t>& packet);
 mac_addr extractSourceMAC(const std::vector<uint8_t>& packet);
 
+uint32_t extractSourceIP(const std::vector<uint8_t>& packet);
+uint32_t extractDestinationIP(const std::vector<uint8_t>& packet);
+mac_addr extractSourceMAC(const std::vector<uint8_t>& packet);
+
 #endif //UTILS_RAW_H

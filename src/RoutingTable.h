@@ -24,6 +24,7 @@ public:
 
     const std::unordered_map<std::string, RoutingInterface>& getRoutingInterfaces() const override;
 
+
 private:
     std::vector<RoutingEntry> routingEntries; /**< Collection of routing entries. */
     std::unordered_map<std::string, RoutingInterface> routingInterfaces; /**< Map of interface names to routing interfaces. */
