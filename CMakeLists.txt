@@ -55,7 +55,3 @@ if (IS_LITTLE_ENDIAN)
 else()
     add_compile_definitions(__BYTE_ORDER=2)
 endif()
-
-# for debugging
-set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
