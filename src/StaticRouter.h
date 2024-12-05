@@ -7,8 +7,7 @@
 #include "IArpCache.h"
 #include "IPacketSender.h"
 #include "IRoutingTable.h"
-#include "ICMPSender.h"
-#include "ARPSender.h"
+
 
 
 class StaticRouter {

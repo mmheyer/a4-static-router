@@ -69,6 +69,7 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
 
 }
 
+
 void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, sr_ethernet_hdr_t *ethHeader){
     std::cout << "handleARP" << std::endl;
     //constexpr inline size_t ARP_PACKET_SIZE = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
@@ -81,6 +82,7 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
     // Print ARP header information
     std::cout << "\n *** ARP Header ***" << std::endl;
     std::cout << "ARP Operation: " << std::hex << ntohs(arpHeader->ar_op) << std::dec << std::endl;
+    std::cout << "Sender MAC: ";
     std::cout << "Sender MAC: ";
     for (int i = 0; i < ETHER_ADDR_LEN; i++) {
         std::cout << std::hex << (int)arpHeader->ar_sha[i] << (i < ETHER_ADDR_LEN - 1 ? ":" : "");
@@ -276,17 +278,21 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         return;
     }
     std::cout << "[FORWARD IP] forwarding route found" << std::endl;
+    std::cout << "[FORWARD IP] forwarding route found" << std::endl;
 
     // Check ARP cache for next-hop MAC
     auto nextHopMAC = arpCache->getEntry(route->gateway);
     if (nextHopMAC) {
         std::cout << "[FORWARD IP] next hop" << std::endl;
+        std::cout << "[FORWARD IP] next hop" << std::endl;
         // Update Ethernet header with next-hop MAC and router's MAC
         std::memcpy(ethHeader->ether_dhost, nextHopMAC->data(), ETHER_ADDR_LEN);
         std::memcpy(ethHeader->ether_shost, routingTable->getRoutingInterface(route->iface).mac.data(), ETHER_ADDR_LEN);
         std::cout << "next hop pkt sent" << std::endl;
+        std::cout << "next hop pkt sent" << std::endl;
         packetSender->sendPacket(packet, route->iface);
     } else {
+        std::cout << "[FORWARD IP] queue" << std::endl;
         std::cout << "[FORWARD IP] queue" << std::endl;
         // Queue the packet and send ARP request
         arpCache->queuePacket(route->gateway, packet, route->iface);
