@@ -195,10 +195,14 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     // Check if the destination IP matches one of the router's interfaces
     // Check if the destination IP matches one of the router's interfaces
    // Check if the destination IP matches one of the router's interfaces
+
+
     for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
         std::cout << "dest ip : " << ipHeader->ip_dst << " " << "ntohl " << ntohl(ipHeader->ip_dst) << std::endl;
-        std::cout << "iface ip : " << ifaceInfo.ip << " " << "ntohl " << ntohl(ifaceInfo.ip) << std::endl;
-        if (ipHeader->ip_dst == ntohl(ifaceInfo.ip)) {
+        std::cout << "iface ip : " << ifaceInfo.ip << " " << "ntohl " << ntohl(ifaceInfo.ip ) << std::endl;
+        const uint32_t mask = 0xFFFFFF00;
+        std::cout << " --------> " << (ntohl(ipHeader->ip_dst) & mask) << " " <<(ntohl(ifaceInfo.ip) & mask) << std::endl;
+        if ((ntohl(ipHeader->ip_dst) & mask) == (ntohl(ifaceInfo.ip) & mask)) {
             if(ipHeader->ip_p == ip_protocol_icmp){
             // Destination IP matches the router's interface IP
                 std::cout << "ECHO" << std::endl;
@@ -206,7 +210,7 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
             } else {
                 // Forward the packet or handle as unreachable
                 std::cout << "Destination Unreachable" << std::endl;
-                icmpSender->sendDestinationUnreachable(packet, iface, ifaceInfo.ip, 3 /* Port Unreachable */);
+                icmpSender->sendDestinationUnreachable(packet, iface, ifaceInfo.ip, 3);
             }
         return;
         }
