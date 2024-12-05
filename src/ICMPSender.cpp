@@ -2,6 +2,7 @@
 #include "utils.h"
 #include <cstring>
 #include <arpa/inet.h>
+#include <spdlog/spdlog.h>
 
 ICMPSender::ICMPSender(std::shared_ptr<IPacketSender> packetSender)
     : packetSender_(std::move(packetSender)) {}
@@ -34,6 +35,16 @@ void ICMPSender::sendTimeExceeded(const std::vector<uint8_t>& originalPacket,
                                   const mac_addr& destMAC,
                                   uint32_t destIP,
                                   const std::string& iface) {
+
+    spdlog::debug("sendTimeExceeded called with:");
+    spdlog::debug("Source IP: {}", inet_ntoa(*(in_addr*)&sourceIP));
+    spdlog::debug("Dest IP: {}", inet_ntoa(*(in_addr*)&destIP));
+    spdlog::debug("Source MAC: {:02x}:{02x}:{02x}:{02x}:{02x}:{02x}",
+                sourceMAC[0], sourceMAC[1], sourceMAC[2], sourceMAC[3], sourceMAC[4], sourceMAC[5]);
+    spdlog::debug("Dest MAC: {:02x}:{02x}:{02x}:{02x}:{02x}:{02x}",
+                destMAC[0], destMAC[1], destMAC[2], destMAC[3], destMAC[4], destMAC[5]);
+    spdlog::debug("Iface: {}", iface);
+    spdlog::debug("Original Packet Size: {}", originalPacket.size());
     auto icmpPacket = constructICMPPacket(originalPacket, sourceIP, destIP, sourceMAC, destMAC, 11, 0);
     packetSender_->sendPacket(icmpPacket, iface);
 }

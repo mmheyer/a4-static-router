@@ -7,6 +7,7 @@
 #include "utils.h"
 #include "RoutingTable.h"
 #include "ICMPSender.h"
+#include <arpa/inet.h>  // for inet_ntop
 
 StaticRouter::StaticRouter(std::unique_ptr<IArpCache> arpCache, std::shared_ptr<IRoutingTable> routingTable,
                            std::shared_ptr<IPacketSender> packetSender)
@@ -171,7 +172,8 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
 
 void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader) {
     std::cout << "[IP] handleIP" << std::endl;
-    // Check if packet contains an IP header
+
+    // Ensure the packet contains at least an Ethernet and IP header
     if (packet.size() < sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)) {
         spdlog::error("Packet is too small to contain an IP header.");
         return;
@@ -179,58 +181,72 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
 
     // Extract IP header
     auto* ipHeader = reinterpret_cast<sr_ip_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t));
+
     // Verify checksum
     uint16_t originalChecksum = ipHeader->ip_sum;
     ipHeader->ip_sum = 0;
     uint16_t calculatedChecksum = cksum(reinterpret_cast<uint16_t*>(ipHeader), sizeof(sr_ip_hdr_t));
-    ipHeader->ip_sum = originalChecksum;  // Restore original checksum
+    ipHeader->ip_sum = originalChecksum;
+
     if (calculatedChecksum != originalChecksum) {
         spdlog::error("Invalid IP checksum. Dropping packet.");
         return;
     }
     std::cout << "[IP] checksum verified" << std::endl;
-     // Print IP header (assuming sr_ip_hdr_t is a struct with IP addresses and protocol)
-    std::cout << "[IP Header] Source IP: " << (int)(ipHeader->ip_src)<< std::endl;
-    std::cout << "[IP Header] Destination IP: " << (int)(ipHeader->ip_dst) << std::endl;
-    std::cout << "[IP Header] Protocol: " << (int)(ipHeader->ip_p) << std::endl;
-    std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
-    // Check if the destination IP matches one of the router's interfaces
-    // Check if the destination IP matches one of the router's interfaces
-   // Check if the destination IP matches one of the router's interfaces
 
+    // Decrement TTL and check if expired
+    if (ipHeader->ip_ttl <= 1) {
+        std::cout << "[IP] TTL expired" << std::endl;
 
+        // Find the source MAC address for the ICMP response
+        RoutingInterface ifaceInfo = routingTable->getRoutingInterface(iface);
+
+        // Send ICMP Time Exceeded message
+        char str[INET_ADDRSTRLEN];  // Buffer for IPv4 address string
+        uint32_t networkOrderIP = ifaceInfo.ip;  // Convert to network byte order
+        if (inet_ntop(AF_INET, &networkOrderIP, str, INET_ADDRSTRLEN)) {
+            std::cout << str << std::endl;
+        } else {
+            std::cerr << "Failed to convert IP address" << std::endl;
+        }
+
+        // char str[INET_ADDRSTRLEN];  // Buffer for IPv4 address string
+        // uint32_t networkOrderIP = htonl(ipHeader->ip_src);  // Convert to network byte order
+        // if (inet_ntop(AF_INET, &networkOrderIP, str, INET_ADDRSTRLEN)) {
+        //     std::cout << str << std::endl;
+        // } else {
+        //     std::cerr << "Failed to convert IP address" << std::endl;
+        // }
+
+        // icmpSender->sendTimeExceeded(packet, ifaceInfo.mac, ifaceInfo.ip, extractSourceMAC(packet), ntohl(ipHeader->ip_src), iface);
+        std::cout << "iface = " << iface << std::endl;
+        icmpSender->sendTimeExceeded(packet, ifaceInfo.mac, ntohl(ifaceInfo.ip), extractSourceMAC(packet), ntohl(ipHeader->ip_src), iface);
+        return;
+    }
+    ipHeader->ip_ttl--;
+    ipHeader->ip_sum = 0; // Clear checksum before recomputing
+    ipHeader->ip_sum = cksum(reinterpret_cast<uint16_t*>(ipHeader), sizeof(sr_ip_hdr_t));
+
+    // Check if the destination IP matches one of the router's interfaces
     for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
-        std::cout << "dest ip : " << ipHeader->ip_dst << " " << "ntohl " << ntohl(ipHeader->ip_dst) << std::endl;
-        std::cout << "iface ip : " << ifaceInfo.ip << " " << "ntohl " << ntohl(ifaceInfo.ip ) << std::endl;
-        const uint32_t mask = 0xFFFFFF00;
-        std::cout << " --------> " << (ntohl(ipHeader->ip_dst) & mask) << " " <<(ntohl(ifaceInfo.ip) & mask) << std::endl;
-        if ((ntohl(ipHeader->ip_dst) & mask) == (ntohl(ifaceInfo.ip) & mask)) {
-             
-            if(ipHeader->ip_p == ip_protocol_icmp){
-            // Destination IP matches the router's interface IP
-                std::cout << "ECHO" << std::endl;
+        if (ntohl(ipHeader->ip_dst) == ntohl(ifaceInfo.ip)) {
+            // Handle ICMP Echo Request
+            if (ipHeader->ip_p == ip_protocol_icmp) {
+                std::cout << "[IP] Destination matches router. Handling ICMP Echo Request." << std::endl;
                 handleICMPEchoRequest(packet, iface, ethHeader);
             } else {
-                // Forward the packet or handle as unreachable
-                std::cout << "Destination Unreachable" << std::endl;
-                 mac_addr sourceMAC = extractSourceMAC(packet);
-                 mac_addr destMAC = extractSourceMAC(packet);
-
-                // Call sendDestinationUnreachable
-                icmpSender->sendDestinationUnreachable(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface, ICMPSender::DestinationUnreachableCode::PORT_UNREACHABLE);
-           
+                // Send ICMP Port Unreachable for non-ICMP traffic to the router's interfaces
+                std::cout << "[IP] Destination matches router. Sending ICMP Port Unreachable." << std::endl;
+                RoutingInterface ifaceInfo = routingTable->getRoutingInterface(iface);
+                icmpSender->sendDestinationUnreachable(packet, ifaceInfo.mac, ifaceInfo.ip, extractSourceMAC(packet), ntohl(ipHeader->ip_src), iface, ICMPSender::DestinationUnreachableCode::PORT_UNREACHABLE);
             }
-        return;
+            return;
         }
-        
     }
 
-    // Forward the packet if destination IP is not one of the router's interfaces
-    std::cout << "forward" << std::endl;
-    spdlog::info("Destination IP does not match any router interface. Forwarding packet.");
+    // Forward the packet if it is not destined for the router
+    std::cout << "[IP] Destination does not match any router interface. Forwarding packet." << std::endl;
     forwardIPPacket(packet, iface, ethHeader, ipHeader);
-   // handleICMPEchoRequest(packet, iface, ethHeader);
-
 }
 
 void StaticRouter::sendDestinationUnreachable(const std::vector<uint8_t>& packet,
