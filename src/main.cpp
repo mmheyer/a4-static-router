@@ -32,7 +32,6 @@ int main(int argc, char **argv)
     auto result = options.parse(argc, argv);
 
     // initialize logger
-    spdlog::set_level(spdlog::level::info); // Only log messages of level info or higher
     initializeLogging();
 
     BridgeClient client(result["routing-table"].as<std::string>(), result["pcap-prefix"].as<std::string>());
