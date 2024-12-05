@@ -26,12 +26,6 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
         return;
     }
 
-    // TODO: Your code below
-    /* static router
-    receives raw ethernet frames, process packets, forward to correct outgoing interface
-
-    */
-
     //extract ethernet header
     std::cout << "\n *** Packet received on interface: " << iface << " ***" << std::endl;
     std::cout << "Packet size: " << packet.size() << " bytes" << std::endl;
@@ -115,16 +109,6 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
     } else if(op == arp_op_request){
         std::cout << "REQUEST" << std::endl;
         spdlog::info("Received ARP Request");
-        //get ip 
-        //TODO FIX::: 
-        auto x = routingTable->getRoutingEntry(ntohl(arpHeader->ar_tip));
-        RoutingEntry routerIp = *x;
-        std::cout << routerIp.dest << std::endl;
-        //TODO dest unreachable
-       /*if(!x){
-            std::cout << "Dest Unreachable" << std::endl;
-            return;
-        }*/
         
 
         std::cout << "Route found :) " << std::endl;
@@ -135,7 +119,6 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
         auto *replyEthH = reinterpret_cast<sr_ethernet_hdr_t *>(reply.data());
         auto *replyArpH = reinterpret_cast<sr_arp_hdr_t *>(reply.data() + sizeof(sr_ethernet_hdr_t));
 
-        //TODO FIXXX
         RoutingInterface RI = routingTable->getRoutingInterface(iface);                 // Source(router's MAC for the interface)
         std::memcpy(replyEthH->ether_dhost, arpHeader->ar_sha, ETHER_ADDR_LEN); // Target (source of the request)
         std::memcpy(replyEthH->ether_shost, RI.mac.data(), ETHER_ADDR_LEN); // (router's MAC)
@@ -211,32 +194,46 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
     // Check if the destination IP matches one of the router's interfaces
     // Check if the destination IP matches one of the router's interfaces
-   /* for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
-        if (ifaceInfo.ip == ntohl(ipHeader->ip_dst)) {
-            if (ipHeader->ip_p == ip_protocol_icmp) {
-                // Handle ICMP Echo Request
+   // Check if the destination IP matches one of the router's interfaces
+    for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
+        std::cout << "dest ip : " << ipHeader->ip_dst << " " << "ntohl " << ntohl(ipHeader->ip_dst) << std::endl;
+        std::cout << "iface ip : " << ifaceInfo.ip << " " << "ntohl " << ntohl(ifaceInfo.ip) << std::endl;
+        if (ipHeader->ip_dst == ntohl(ifaceInfo.ip)) {
+            if(ipHeader->ip_p == ip_protocol_icmp){
+            // Destination IP matches the router's interface IP
+                std::cout << "ECHO" << std::endl;
                 handleICMPEchoRequest(packet, iface, ethHeader);
             } else {
-                // Send ICMP Port Unreachable
-                icmpSender->sendDestinationUnreachable(packet, iface, ifaceInfo.ip, 3);
+                // Forward the packet or handle as unreachable
+                std::cout << "Destination Unreachable" << std::endl;
+                icmpSender->sendDestinationUnreachable(packet, iface, ifaceInfo.ip, 3 /* Port Unreachable */);
             }
-            return;
+        return;
         }
-    }*/
-    // Forward the packet   
+        
+    }
 
-   
-
-    
-    handleICMPEchoRequest(packet, iface, ethHeader);
+    // Forward the packet if destination IP is not one of the router's interfaces
+    std::cout << "forward" << std::endl;
+    spdlog::info("Destination IP does not match any router interface. Forwarding packet.");
+    forwardIPPacket(packet, iface, ethHeader, ipHeader);
+   // handleICMPEchoRequest(packet, iface, ethHeader);
 
 }
+
+void StaticRouter::sendDestinationUnreachable(const std::vector<uint8_t>& packet,
+                                            const std::string& iface,
+                                            uint32_t sourceIP,
+                                            uint8_t icmpCode) {
+                                                std::cout << "[InDESTUNREACHABLE]" << std::endl;
+    uint32_t destIP = *reinterpret_cast<const uint32_t*>(&packet[12]); // Source IP from the original packet
+   }
 
 void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface,
                                    sr_ethernet_hdr_t* ethHeader, sr_ip_hdr_t* ipHeader) {
     std::cout << "*** wip in forwardip packet" << std::endl;
 
-/*
+
     // Print IP header (assuming sr_ip_hdr_t is a struct with IP addresses and protocol)
     std::cout << "[IP Header] Source IP: " << (int)(ipHeader->ip_src)<< std::endl;
     std::cout << "[IP Header] Destination IP: " << (int)(ipHeader->ip_dst) << std::endl;
@@ -283,7 +280,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         std::cout << "------------------------------------------------FORWARDIP END" << std::endl;
 
       
-    }*/
+    }
 }
 
 void StaticRouter::handleICMPEchoRequest(std::vector<uint8_t>& packet, const std::string& iface,
