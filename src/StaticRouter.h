@@ -29,10 +29,10 @@ private:
     void handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader);
     void forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader, sr_ip_hdr_t* ipHeader);
     void handleICMPEchoRequest(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader);
-    void sendDestinationUnreachable(const std::vector<uint8_t>& packet,
-                                            const std::string& iface,
-                                            uint32_t sourceIP,
-                                            uint8_t icmpCode);
+    // void sendDestinationUnreachable(const std::vector<uint8_t>& packet,
+    //                                         const std::string& iface,
+    //                                         uint32_t sourceIP,
+    //                                         uint8_t icmpCode);
 uint8_t getICMPType(const std::vector<uint8_t>& packetData);
 
     std::mutex mutex;

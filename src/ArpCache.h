@@ -51,6 +51,9 @@ private:
 
     std::unique_ptr<ICMPSender> icmpSender;
     std::unique_ptr<ARPSender> arpSender;
+
+    void handleDestHostUnreachable(ArpRequest& req);
+    void retryArpRequest(ArpRequest& req);
 };
 
 #endif //ARPCACHE_H
