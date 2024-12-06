@@ -119,19 +119,24 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
         spdlog::info("This router owns the requested IP.");
         
         //arp reply 
-
-        //checking for diff interface 
-        bool check = false;
+        RoutingInterface currentInterface = routingTable->getRoutingInterface(iface);
+        if (currentInterface.ip != arpHeader->ar_tip) {
+            std::cout << "Dropping Packet: Target IP does not match receiving interface IP" << std::endl;
+            spdlog::info("Dropping Packet: Target IP {} does not match receiving interface IP {}", 
+                        ntohl(arpHeader->ar_tip), ntohl(currentInterface.ip));
+            return;
+        }
+        bool isTargetIpOwned = false;
         for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
-            if (ifaceInfo.ip == arpHeader->ar_tip) { // Compare target IP with interface IP
-                // Send ARP reply logic here
-               check = true; 
+            if (ifaceInfo.ip == arpHeader->ar_tip) {
+                isTargetIpOwned = true;
+                break;
             }
         }
-
-        if(check == false){
-            std::cout << "Dropping Packet: arp req for diff interface " << std::endl;
-            spdlog::info("Dropping Packet: arp req for diff interface.");
+        if (!isTargetIpOwned) {
+            std::cout << "Dropping Packet: Target IP not owned by router" << std::endl;
+            spdlog::info("Dropping Packet: Target IP {:#08x} not owned by router", ntohl(arpHeader->ar_tip));
+            return;
         }
 
         // Construct ARP reply packet
@@ -249,19 +254,6 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
              if(ipHeader->ip_p == ip_protocol_icmp){
                 // the packet is an ICMP ECHO request
                 std::cout << "ECHO" << std::endl;
-
-                // NOTE: Aditya says we don't need to check ttl for echo requests
-                // // if the ttl is 0
-                // if (ipHeader->ip_ttl <= 1) {
-                //     std::cout << "[FORWARD IP] Time Exceeded" << std::endl;
-
-                //     mac_addr sourceMAC = extractSourceMAC(packet);
-                //     mac_addr destMAC = extractSourceMAC(packet);
-
-                //     icmpSender->sendTimeExceeded(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface);
-                //     return;
-                // }
-
                 handleICMPEchoRequest(packet, iface, ethernet_hdr);
             } 
             // if the packet contains a TCP or UDP payload
@@ -300,7 +292,7 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     auto route = routingTable->getRoutingEntry(ipHeader->ip_dst);
 
     // if there is no route to the destination network
-    if (!route) {
+    if (route == std::nullopt) {
         spdlog::info("No route to network. Sending ICMP destination unreachable.");
         // icmpSender->sendDestinationUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
         sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
@@ -311,7 +303,7 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     auto nextHopMac = arpCache->getEntry(route->gateway);
 
     // if entry is in the ARP cache
-    if (nextHopMac) {
+    if (nextHopMac != std::nullopt) {
         spdlog::info("Destination IP does not match any router interface. Forwarding packet.");
         forwardIPPacket(packet, iface, ethernet_hdr, ipHeader);
         return;
