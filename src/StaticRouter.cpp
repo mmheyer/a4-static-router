@@ -307,19 +307,25 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
         return;
     }
 
-    // check ARP cache for the next hop
-    auto nextHopMac = arpCache->getEntry(route->gateway);
+    // ensure ARP request is send after queueing the packet
+    uint32_t nextHopIP = route->gateway;
+    if (!arpCache->getEntry(nextHopIP)) {
+        spdlog::info("Queueing packet for IP: {:#010x}", nextHopIP);
+        arpCache->queuePacket(nextHopIP, packet, iface);
 
-    // if entry is in the ARP cache
-    if (nextHopMac != std::nullopt) {
-        spdlog::info("Destination IP does not match any router interface. Forwarding packet.");
-        forwardIPPacket(packet, iface, ethernet_hdr, ipHeader);
-        return;
+        // Trigger ARP request
+        auto route = routingTable->getRoutingEntry(nextHopIP);
+        if (route) {
+            arpSender->sendArpRequest(
+                route->gateway,
+                routingTable->getRoutingInterface(route->iface).ip,
+                routingTable->getRoutingInterface(route->iface).mac.data(),
+                route->iface
+            );
+        } else {
+            spdlog::error("No route found for next hop IP: {:#010x}", nextHopIP);
+        }
     }
-
-    // send an ARP request for the next-hop IP (if one hasn't been sent within the last second), 
-    // and add the packet to the queue of packets waiting on this ARP request
-    arpCache->queuePacket(route->gateway, packet, iface);
 }
 
 
@@ -459,7 +465,6 @@ void StaticRouter::sendIcmpMessage(uint8_t type, uint8_t code, const sr_ip_hdr_t
     // Get the MAC address for the destination IP (from the routing entry)
     auto dest_routing_iface = routingTable->getRoutingInterface(routing_entry->iface); 
     memcpy(ethernet_hdr->ether_dhost, dest_routing_iface.mac.data(), ETHER_ADDR_LEN); // Set destination MAC
-
 
     // Set ether type 
     ethernet_hdr->ether_type = htons(ethertype_ip);

@@ -49,11 +49,9 @@ private:
     std::unordered_map<ip_addr, ArpEntry> entries;
     std::unordered_map<ip_addr, ArpRequest> requests;
 
-    std::unique_ptr<ICMPSender> icmpSender;
-    std::unique_ptr<ARPSender> arpSender;
-
     void handleDestHostUnreachable(ArpRequest& req);
     void retryArpRequest(ArpRequest& req);
+    void sendArpRequest(uint32_t targetIP, const std::string& iface);
 };
 
 #endif //ARPCACHE_H

@@ -120,36 +120,14 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
 
     auto it = requests.find(ip);
 
-    // if there is not an arp request for this IP
+    // If there is no existing ARP request for this IP, create a new one
     if (it == requests.end()) {
-        spdlog::info("Creating new ARP request for IP {}.", ip);
+        spdlog::info("Creating new ARP request queue for IP {}.", ip);
         ArpRequest newRequest{ip, std::chrono::steady_clock::now(), 0, {}};
         newRequest.awaitingPackets.emplace_back(packet, iface);
         requests[ip] = std::move(newRequest);
     } else {
-        spdlog::info("Adding packet to existing ARP request for IP {}.", ip);
-
-        // record the current time
-        auto now = std::chrono::steady_clock::now();
-
-        // if a request hasn't been sent within the last second
-        if (now - it->second.lastSent > std::chrono::seconds(1)) {
-            ArpRequest& req = it->second;
-
-            // if the request has been sent 7 or more times
-            if (req.timesSent >= 7) {
-                // send ICMP destination host unreachable messages
-                handleDestHostUnreachable(req);
-
-                // Erase the ARP request after sending ICMP errors
-                it = requests.erase(it);
-            } else {
-                // send an ARP request for the next-hop IP 
-                retryArpRequest(req);
-            }
-        }
-
-        // add the packet to the queue of packets waiting on this ARP request
+        spdlog::info("Adding packet to existing ARP request queue for IP {}.", ip);
         it->second.awaitingPackets.emplace_back(packet, iface);
     }
 }
@@ -203,4 +181,36 @@ void ArpCache::retryArpRequest(ArpRequest& req) {
 
     req.lastSent = std::chrono::steady_clock::now();
     req.timesSent++;
+}
+
+void ArpCache::sendArpRequest(uint32_t targetIP, const std::string& iface) {
+    std::unique_lock lock(mutex);
+
+    auto routingInterface = routingTable->getRoutingInterface(iface);
+
+    // Construct an ARP request packet
+    std::vector<uint8_t> packet(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+
+    // Ethernet header
+    auto* ethHeader = reinterpret_cast<sr_ethernet_hdr_t*>(packet.data());
+    std::memcpy(ethHeader->ether_shost, routingInterface.mac.data(), ETHER_ADDR_LEN);
+    std::fill(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), 0xFF); // Broadcast
+    ethHeader->ether_type = htons(ethertype_arp);
+
+    // ARP header
+    auto* arpHeader = reinterpret_cast<sr_arp_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t));
+    arpHeader->ar_hrd = htons(arp_hrd_ethernet);
+    arpHeader->ar_pro = htons(ethertype_ip);
+    arpHeader->ar_hln = ETHER_ADDR_LEN;
+    arpHeader->ar_pln = 4;
+    arpHeader->ar_op = htons(arp_op_request);
+    std::memcpy(arpHeader->ar_sha, routingInterface.mac.data(), ETHER_ADDR_LEN);
+    arpHeader->ar_sip = htonl(routingInterface.ip);
+    std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0); // Target MAC unknown
+    arpHeader->ar_tip = htonl(targetIP);
+
+    // Send the packet
+    packetSender->sendPacket(packet, iface);
+
+    spdlog::info("Sent ARP request for IP {} on interface {}.", fmt::format("{:08x}", targetIP), iface);
 }
