@@ -186,7 +186,7 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
 
 
 void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader) {
-    std::cout << "[IP] handleIP" << std::endl;
+    spdlog::debug("Handling IP packet.");
 
     // Check if packet contains an IP header
     if (packet.size() < sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)) {
@@ -206,7 +206,7 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
         spdlog::error("Invalid IP checksum. Dropping packet.");
         return;
     }
-    std::cout << "[IP] checksum verified" << std::endl;
+    spdlog::debug("[IP] checksum verified");
 
     // Print IP header (assuming sr_ip_hdr_t is a struct with IP addresses and protocol)
     std::cout << "[IP Header] Source IP: " << (int)(ipHeader->ip_src)<< std::endl;

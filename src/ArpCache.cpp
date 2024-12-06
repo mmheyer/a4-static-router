@@ -71,7 +71,7 @@ void ArpCache::tick() {
         return expired;
     });
 
-    logger->info("Finished processing ARP requests and cache maintenance.");
+    // logger->info("Finished processing ARP requests and cache maintenance.");
 }
 
 void ArpCache::addEntry(uint32_t ip, const mac_addr& mac) {

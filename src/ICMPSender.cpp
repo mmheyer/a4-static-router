@@ -68,8 +68,8 @@ std::vector<uint8_t> ICMPSender::constructICMPPacket(const std::vector<uint8_t>&
     ipHeader->ip_off = 0;
     ipHeader->ip_ttl = 64;
     ipHeader->ip_p = ip_protocol_icmp;
-    ipHeader->ip_src = sourceIP;
-    ipHeader->ip_dst = htonl(destIP);
+    ipHeader->ip_src = sourceIP; // check this
+    ipHeader->ip_dst = destIP;
     ipHeader->ip_sum = 0;
     ipHeader->ip_sum = cksum(ipHeader, sizeof(sr_ip_hdr_t));
 
