@@ -53,7 +53,7 @@ private:
     std::unique_ptr<ARPSender> arpSender;
 
     void handleDestHostUnreachable(ArpRequest& req);
-    void retryArpRequest(ArpRequest& req);
+    void sendArpRequest(ArpRequest& req);
 };
 
 #endif //ARPCACHE_H

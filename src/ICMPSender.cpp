@@ -66,7 +66,7 @@ std::vector<uint8_t> ICMPSender::constructICMPPacket(const std::vector<uint8_t>&
     ipHeader->ip_len = htons(packet.size() - sizeof(sr_ethernet_hdr_t));
     ipHeader->ip_id = 0;
     ipHeader->ip_off = 0;
-    ipHeader->ip_ttl = 64;
+    ipHeader->ip_ttl = INIT_TTL;
     ipHeader->ip_p = ip_protocol_icmp;
     ipHeader->ip_src = sourceIP; // check this
     ipHeader->ip_dst = destIP;

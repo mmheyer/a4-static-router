@@ -406,7 +406,7 @@ void StaticRouter::handleICMPEchoRequest(std::vector<uint8_t>& packet, const std
     ipHeader->ip_src = ipHeader->ip_dst;
     ipHeader->ip_dst = tempIP; // swap source and destination IPs
 
-    ipHeader->ip_ttl = 64; // reset TTL
+    ipHeader->ip_ttl = INIT_TTL; // reset TTL
     ipHeader->ip_sum = 0; //  IP checksum
     ipHeader->ip_sum = cksum(reinterpret_cast<uint16_t*>(ipHeader), sizeof(sr_ip_hdr_t));
 
@@ -449,7 +449,7 @@ void StaticRouter::sendIcmpMessage(uint8_t type, uint8_t code, const sr_ip_hdr_t
     ipHeader->ip_len = htons(icmp_len);
     ipHeader->ip_id = htons(0);
     ipHeader->ip_off = htons(0);
-    ipHeader->ip_ttl = 64;
+    ipHeader->ip_ttl = INIT_TTL;
     ipHeader->ip_p = ip_protocol_icmp;
     ipHeader->ip_src = original_ip_hdr->ip_dst; // Router's IP
     ipHeader->ip_dst = original_ip_hdr->ip_src; // Sender's IP

@@ -56,7 +56,7 @@ void ArpCache::tick() {
                 reqIt = requests.erase(reqIt);
                 continue;
             } else {
-                retryArpRequest(req);
+                sendArpRequest(req);
             }
         }
         ++reqIt;
@@ -115,6 +115,7 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
     if (it == requests.end()) {
         spdlog::info("Creating new ARP request for IP {}.", ip);
         ArpRequest newRequest{ip, std::chrono::steady_clock::now(), 0, {}};
+        sendArpRequest(newRequest); // send ARP request
         newRequest.awaitingPackets.emplace_back(packet, iface);
         requests[ip] = std::move(newRequest);
     } else {
@@ -136,7 +137,7 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
                 it = requests.erase(it);
             } else {
                 // send an ARP request for the next-hop IP 
-                retryArpRequest(req);
+                sendArpRequest(req);
             }
         }
 
@@ -180,7 +181,7 @@ void ArpCache::handleDestHostUnreachable(ArpRequest& req) {
     }
 }
 
-void ArpCache::retryArpRequest(ArpRequest& req) {
+void ArpCache::sendArpRequest(ArpRequest& req) {
     spdlog::info("Retrying ARP request for IP {} (Attempt {}).", req.ip, req.timesSent + 1);
 
     auto route = routingTable->getRoutingEntry(req.ip);
