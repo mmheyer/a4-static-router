@@ -316,21 +316,10 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     std::cout << "[IP Header] Protocol: " << (int)(ipHeader->ip_p) << std::endl;
     std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
 
-    // The source MAC address should be the MAC address of the router’s interface that is sending the ICMP message.
-	// This is the MAC address associated with the interface on which the original packet was received.
-    mac_addr icmpSourceMAC = routingTable->getRoutingInterface(iface).mac;
-
-    // The destination MAC address should be the MAC address of the device that sent the original packet (i.e., the packet that triggered the ICMP message).
-	// This is typically the source MAC address from the original Ethernet header.
+    mac_addr icmpSourceMAC = extractDestinationMAC(ethernet_hdr);
     mac_addr icmpDestMAC = extractSourceMAC(ethernet_hdr);
-
-    // The source IP address should be the IP address of the router’s interface that is sending the ICMP message.
-	// This is the IP address associated with the interface on which the original packet was received.
-    ip_addr icmpSourceIP = routingTable->getRoutingInterface(iface).ip;
-
-    // The destination IP address should be the source IP address from the original packet’s IP header.
-	// This is the IP address of the device that sent the packet which caused the ICMP message to be generated.
-    ip_addr icmpDestIP = ipHeader->ip_src;
+    ip_addr icmpSourceIp = routingTable->getRoutingInterface(iface).ip;
+    ip_addr icmpDestIp = ipHeader->ip_src;
 
     // for each interface in the routing table
     for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
@@ -350,7 +339,7 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
             // if the packet contains a TCP or UDP payload
             else if (ipHeader->ip_p == ip_protocol_tcp || ipHeader->ip_p == ip_protocol_udp) {
                 spdlog::info("Packet contains TCP or UDP payload. Sending ICMP port unreachable.");
-                icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface);
+                icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIp, icmpDestMAC, icmpDestIp, iface);
             }
             // otherwise, discard the packet
             return;
@@ -395,14 +384,18 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     }
     std::cout << "[FORWARD IP] checksum verified" << std::endl;
 
+    mac_addr sourceMAC = extractDestinationMAC(ethernet_hdr);
+    mac_addr destMAC = extractSourceMAC(ethernet_hdr);
+    ip_addr sourceIp = routingTable->getRoutingInterface(iface).ip;
+    ip_addr destIp = ipHeader->ip_src;
+
     // Decrement TTL and recompute checksum
     ipHeader->ip_ttl--;
     if (ipHeader->ip_ttl <= 0) {
         std::cout << "[FORWARD IP] ttl = 0" << std::endl;
-        mac_addr sourceMAC = extractDestinationMAC(ethernet_hdr);
-        mac_addr destMAC = extractSourceMAC(ethernet_hdr);
 
-        icmpSender->sendTimeExceeded(packet, sourceMAC, ipHeader->ip_dst, destMAC, ipHeader->ip_src, iface);
+        icmpSender->sendTimeExceeded(packet, sourceMAC, sourceIp, destMAC, destIp, iface);
+
         return;
     }
     ipHeader->ip_sum = 0;
@@ -416,11 +409,9 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
 
     if (route->gateway == 0) {
         std::cout << "[FORWARD IP] dest unreachable in forwarding" << std::endl;
-         mac_addr sourceMAC = extractDestinationMAC(ethernet_hdr);
-        mac_addr destMAC = extractSourceMAC(ethernet_hdr);
 
          // Call sendDestinationUnreachable
-         icmpSender->sendDestinationUnreachable(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
+         icmpSender->sendDestinationUnreachable(packet, sourceMAC, sourceIp, destMAC, destIp, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
         // sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
         return;
     }
@@ -477,9 +468,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         std::cout << "[ARP Request] Sending ARP request for gateway IP: " << route->gateway
                   << " with source IP: " << senderIP << " via interface: " << route->iface << std::endl;
              packetSender->sendPacket(arpRequest, route->iface);
-        std::cout << "[FORWARD IP] ARP request sent for gateway IP: " << route->gateway << std::endl;
-    
-      
+        std::cout << "[FORWARD IP] ARP request sent for gateway IP: " << route->gateway << std::endl;  
     }
 }
 
