@@ -26,8 +26,8 @@ public:
     void handlePacket(std::vector<uint8_t> packet, std::string iface);
 
 private:
-    void handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader);
-    void forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader, sr_ip_hdr_t* ipHeader);
+    void handleIP(std::vector<uint8_t>& packet, const std::string& iface);
+    void forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface);
     void handleICMPEchoRequest(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader);
     // void sendDestinationUnreachable(const std::vector<uint8_t>& packet,
     //                                         const std::string& iface,

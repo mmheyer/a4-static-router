@@ -86,6 +86,7 @@ bool ArpCache::hasRequest(uint32_t ip) {
     // Check if the IP exists in the requests map
     return requests.find(ip) != requests.end();
 }
+
 void ArpCache::tick() {
     std::unique_lock lock(mutex);
 
@@ -139,7 +140,9 @@ void ArpCache::tick() {
 
             }
 
-            requestsToRemove.push_back(ip);
+            // remove the request
+            requests.erase(ip);
+            spdlog::debug("Removed request for IP {} due to destination unreachable.");
         } else if (now - req.lastSent >= std::chrono::seconds(1)) {
             // Retry ARP request if more than 1 second has passed since the last attempt
             auto route = routingTable->getRoutingInterface(req.awaitingPackets.front().iface);
@@ -150,11 +153,6 @@ void ArpCache::tick() {
             req.lastSent = now;
             req.timesSent++;
         }
-    }
-
-    // Remove expired requests
-    for (uint32_t ip : requestsToRemove) {
-        requests.erase(ip);
     }
 
     // Cleanup expired ARP cache entries
@@ -179,11 +177,25 @@ void ArpCache::addEntry(uint32_t ip, const mac_addr& mac) {
     if (it != requests.end()) {
         spdlog::info("Sending queued packets for IP {}.", ip);
 
-        for (const auto& awaitingPacket : it->second.awaitingPackets) {
+        for (auto& awaitingPacket : it->second.awaitingPackets) {
+            spdlog::info("Sending packet out of interface {}", awaitingPacket.iface);
+            
+            // Extract packet data and interface
+            auto& packet = awaitingPacket.packet;
+            const auto& queuedIface = awaitingPacket.iface;
+
+            // Modify the Ethernet header
+            auto* queuedEthHeader = reinterpret_cast<sr_ethernet_hdr_t*>(packet.data());
+            std::memcpy(queuedEthHeader->ether_dhost, mac.data(), ETHER_ADDR_LEN);
+            std::memcpy(queuedEthHeader->ether_shost, routingTable->getRoutingInterface(queuedIface).mac.data(), ETHER_ADDR_LEN);
+
+            // Send the packet
+            packetSender->sendPacket(packet, queuedIface);
             packetSender->sendPacket(awaitingPacket.packet, awaitingPacket.iface);
         }
 
         requests.erase(it);
+
     }
 }
 
@@ -200,9 +212,45 @@ std::optional<mac_addr> ArpCache::getEntry(uint32_t ip) {
     return std::nullopt;
 }
 
+// Helper function to convert MAC address to a string
+std::string macArrayToString(const uint8_t mac[ETHER_ADDR_LEN]) {
+    std::ostringstream macStream;
+    for (int i = 0; i < ETHER_ADDR_LEN; ++i) {
+        macStream << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(mac[i]);
+        if (i < ETHER_ADDR_LEN - 1) {
+            macStream << ":";
+        }
+    }
+    return macStream.str();
+}
+
+void logAwaitingPackets(const std::list<AwaitingPacket>& awaitingPackets) {
+    for (const auto& awaitingPacket : awaitingPackets) {
+        const auto& packet = awaitingPacket.packet;
+        const auto& iface = awaitingPacket.iface;
+
+        // Log the packet size and associated interface
+        spdlog::info("Packet on interface {}: Size = {} bytes", iface, packet.size());
+
+        // Ensure the packet is large enough to contain an Ethernet header
+        if (packet.size() >= sizeof(sr_ethernet_hdr_t)) {
+            const auto* ethHeader = reinterpret_cast<const sr_ethernet_hdr_t*>(packet.data());
+
+            // Log Ethernet header details
+            spdlog::info("  Ethernet Header:");
+            spdlog::info("    Destination MAC: {}", macArrayToString(ethHeader->ether_dhost));
+            spdlog::info("    Source MAC: {}", macArrayToString(ethHeader->ether_shost));
+            spdlog::info("    EtherType: 0x{:04x}", ntohs(ethHeader->ether_type));
+        } else {
+            spdlog::warn("  Packet is too small to contain an Ethernet header.");
+        }
+    }
+}
+
 void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string& iface) {
     std::unique_lock lock(mutex);
     spdlog::info("Queueing packet for IP {} on interface {}.", ip, iface);
+    print_addr_ip_int(ip);
 
     auto it = requests.find(ip);
 
@@ -212,118 +260,162 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
         ArpRequest newRequest{ip, std::chrono::steady_clock::now(), 0, {}};
         newRequest.awaitingPackets.emplace_back(packet, iface);
         requests[ip] = std::move(newRequest);
+        spdlog::debug("There are {} requests after adding a request.", requests.size());
+        logAwaitingPackets(requests[ip].awaitingPackets);
     } else {
         spdlog::info("Adding packet to existing ARP request queue for IP {}.", ip);
         it->second.awaitingPackets.emplace_back(packet, iface);
+        spdlog::debug("There are {} requests after adding a request.", requests.size());
+        logAwaitingPackets(it->second.awaitingPackets);
     }
+
     std::cout << " * " << std::endl;
     lock.unlock();
 
-    if (shouldSendArpRequest(ip)) {
-        std::cout << " ** " << std::endl;
+    // if (shouldSendArpRequest(ip)) {
+    //     std::cout << " ** " << std::endl;
        
-        // Retrieve routing interface information
-        auto routingInterface = routingTable->getRoutingInterface(iface);
-        uint32_t senderIP = routingInterface.ip;
-        const uint8_t* senderMac = routingInterface.mac.data();
-        std::cout << "[arpcache queue] Routing Interface - Sender IP: " 
-          << senderIP << ", Sender MAC: " << routingInterface.mac.data() << std::endl;
-        // Build an ARP request packet
-        std::vector<uint8_t> arpPacket(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+    //     // Retrieve routing interface information
+    //     auto routingInterface = routingTable->getRoutingInterface(iface);
+    //     uint32_t senderIP = routingInterface.ip;
+    //     const uint8_t* senderMac = routingInterface.mac.data();
+    //     std::cout << "[arpcache queue] Routing Interface - Sender IP: " 
+    //       << senderIP << ", Sender MAC: " << routingInterface.mac.data() << std::endl;
+    //     // Build an ARP request packet
+    //     std::vector<uint8_t> arpPacket(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
 
-        // Ethernet header
-        auto* ethHeader = reinterpret_cast<sr_ethernet_hdr_t*>(arpPacket.data());
-        std::fill(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), 0xFF); // Broadcast MAC address
-        std::memcpy(ethHeader->ether_shost, senderMac, ETHER_ADDR_LEN); // Sender's MAC address
-        ethHeader->ether_type = htons(ethertype_arp);
+    //     // Ethernet header
+    //     auto* ethHeader = reinterpret_cast<sr_ethernet_hdr_t*>(arpPacket.data());
+    //     std::fill(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), 0xFF); // Broadcast MAC address
+    //     std::memcpy(ethHeader->ether_shost, senderMac, ETHER_ADDR_LEN); // Sender's MAC address
+    //     ethHeader->ether_type = htons(ethertype_arp);
 
-        std::cout << "[arpcache queue] Ethernet Header - Broadcast MAC, Sender MAC: ";
-        for (int i = 0; i < ETHER_ADDR_LEN; ++i) {
-            std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(ethHeader->ether_shost[i]);
-        }
-        std::cout << ", EtherType: " << std::hex << ntohs(ethHeader->ether_type) << std::dec << std::endl;
+    //     std::cout << "[arpcache queue] Ethernet Header - Broadcast MAC, Sender MAC: ";
+    //     for (int i = 0; i < ETHER_ADDR_LEN; ++i) {
+    //         std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(ethHeader->ether_shost[i]);
+    //     }
+    //     std::cout << ", EtherType: " << std::hex << ntohs(ethHeader->ether_type) << std::dec << std::endl;
 
 
-        // ARP header
-        auto* arpHeader = reinterpret_cast<sr_arp_hdr_t*>(arpPacket.data() + sizeof(sr_ethernet_hdr_t));
-        arpHeader->ar_hrd = htons(arp_hrd_ethernet); // Hardware type: Ethernet
-        arpHeader->ar_pro = htons(ethertype_ip);     // Protocol type: IPv4
-        arpHeader->ar_hln = ETHER_ADDR_LEN;         // Hardware address length
-        arpHeader->ar_pln = sizeof(uint32_t);       // Protocol address length
-        arpHeader->ar_op = htons(arp_op_request);   // ARP operation: request
+    //     // ARP header
+    //     auto* arpHeader = reinterpret_cast<sr_arp_hdr_t*>(arpPacket.data() + sizeof(sr_ethernet_hdr_t));
+    //     arpHeader->ar_hrd = htons(arp_hrd_ethernet); // Hardware type: Ethernet
+    //     arpHeader->ar_pro = htons(ethertype_ip);     // Protocol type: IPv4
+    //     arpHeader->ar_hln = ETHER_ADDR_LEN;         // Hardware address length
+    //     arpHeader->ar_pln = sizeof(uint32_t);       // Protocol address length
+    //     arpHeader->ar_op = htons(arp_op_request);   // ARP operation: request
 
-        // Sender's hardware and protocol addresses
-        std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
-        arpHeader->ar_sip = senderIP;
+    //     // Sender's hardware and protocol addresses
+    //     std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
+    //     arpHeader->ar_sip = senderIP;
 
-        // Target's hardware address is empty for a request
-        std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
-        arpHeader->ar_tip = ip;
+    //     // Target's hardware address is empty for a request
+    //     std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
+    //     arpHeader->ar_tip = ip;
 
-        std::cout << "[arpcache queue] ARP Header - Sender MAC: ";
-        for (int i = 0; i < ETHER_ADDR_LEN; ++i) {
-            std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(arpHeader->ar_sha[i]);
-        }
-        std::cout << ", Sender IP: " << std::dec << senderIP 
-                << ", Target IP: " << ip << std::endl;
+    //     std::cout << "[arpcache queue] ARP Header - Sender MAC: ";
+    //     for (int i = 0; i < ETHER_ADDR_LEN; ++i) {
+    //         std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(arpHeader->ar_sha[i]);
+    //     }
+    //     std::cout << ", Sender IP: " << std::dec << senderIP 
+    //             << ", Target IP: " << ip << std::endl;
 
-        // Log packet contents
-        spdlog::debug("ARP Request: Sender IP: {}, Target IP: {}", senderIP, ip);
-        std::cout << "[arpcache queue] ARP Packet ready, sending to interface: " << iface << std::endl;
+    //     // Log packet contents
+    //     spdlog::debug("ARP Request: Sender IP: {}, Target IP: {}", senderIP, ip);
+    //     std::cout << "[arpcache queue] ARP Packet ready, sending to interface: " << iface << std::endl;
 
-        // Send the ARP request directly
-        packetSender->sendPacket(arpPacket, iface);
+    //     // Send the ARP request directly
+    //     packetSender->sendPacket(arpPacket, iface);
 
-        std::cout << "ARP Request sent for IP: " << ip << " from sender IP: " << senderIP << " via interface: " << iface << ".\n";
-    }
-    std::cout << " * " << std::endl;
+    //     std::cout << "ARP Request sent for IP: " << ip << " from sender IP: " << senderIP << " via interface: " << iface << ".\n";
+    // }
+    // std::cout << " * " << std::endl;
 
 }
 
 
-bool ArpCache::shouldSendArpRequest(uint32_t ip) {
-    std::cout << "[SHOULD SEND ARP REQUEST]" << std::endl;
+// bool ArpCache::shouldSendArpRequest(uint32_t ip) {
+//     std::cout << "[SHOULD SEND ARP REQUEST]" << std::endl;
 
-    // Lock the mutex to ensure thread safety when checking or modifying shared state.
-    std::unique_lock lock(mutex);
-    std::cout << "[SHOULD SEND ARP REQUEST] post lock" << std::endl;
+//     // Lock the mutex to ensure thread safety when checking or modifying shared state.
+//     std::unique_lock lock(mutex);
+//     std::cout << "[SHOULD SEND ARP REQUEST] post lock" << std::endl;
 
-    auto now = std::chrono::steady_clock::now();
+//     auto now = std::chrono::steady_clock::now();
 
-    // Check if an ARP request for the given IP already exists
-    auto it = requests.find(ip);
-    if (it != requests.end()) {
-        ArpRequest& req = it->second;
+//     // Check if an ARP request for the given IP already exists
+//     auto it = requests.find(ip);
+//     if (it != requests.end()) {
+//         ArpRequest& req = it->second;
 
-        // Calculate time difference and log it
-        auto timeDiff = std::chrono::duration_cast<std::chrono::seconds>(now - req.lastSent);
-        std::cout << "[SHOULD SEND ARP REQUEST] Time since last ARP request: " 
-                  << timeDiff.count() << " seconds." << std::endl;
+//         // Calculate time difference and log it
+//         auto timeDiff = std::chrono::duration_cast<std::chrono::seconds>(now - req.lastSent);
+//         std::cout << "[SHOULD SEND ARP REQUEST] Time since last ARP request: " 
+//                   << timeDiff.count() << " seconds." << std::endl;
 
-        // Check if the ARP request was sent recently
-        if (timeDiff < std::chrono::seconds(1) && timeDiff.count() != 0) {
-            std::cout << "FALSE" << std::endl;
-            spdlog::info("Skipping ARP request for IP {} as one was sent recently.", ip);
-            lock.unlock();
-            return false; // ARP request was sent recently
-        }
+//         // Check if the ARP request was sent recently
+//         if (timeDiff < std::chrono::seconds(1) && timeDiff.count() != 0) {
+//             std::cout << "FALSE" << std::endl;
+//             spdlog::info("Skipping ARP request for IP {} as one was sent recently.", ip);
+//             lock.unlock();
+//             return false; // ARP request was sent recently
+//         }
 
-        // Update the request's lastSent time to now
-        req.lastSent = now;
-        req.timesSent++; // Increment the count of ARP requests sent
-        spdlog::info("Allowing ARP request for IP {} after cooldown.", ip);
-        std::cout << "TRUE" << std::endl;
-        lock.unlock();
-        return true;
+//         // Update the request's lastSent time to now
+//         req.lastSent = now;
+//         req.timesSent++; // Increment the count of ARP requests sent
+//         spdlog::info("Allowing ARP request for IP {} after cooldown.", ip);
+//         std::cout << "TRUE" << std::endl;
+//         lock.unlock();
+//         return true;
+//     }
+
+//     // If no ARP request exists for this IP, create a new one
+//     std::cout << "No ARP request exists for IP, creating new one." << std::endl;
+//     ArpRequest newRequest{ip, now, 1, {}};
+//     requests[ip] = std::move(newRequest);
+//     spdlog::debug("There are {} requests after adding the request.", requests.size());
+
+//     spdlog::info("Allowing ARP request for IP {} as no prior request exists.", ip);
+//     std::cout << "TRUE (new request)" << std::endl;
+//     lock.unlock();
+//     return true;
+// }
+
+std::optional<std::__cxx11::list<AwaitingPacket>> ArpCache::getQueuedPackets(uint32_t ip) {
+    std::unique_lock lock(mutex); // Ensure thread safety
+
+    spdlog::debug("There are {} requests.", requests.size());
+
+    for (auto& request : requests) {
+        spdlog::debug("There is a request for IP:");
+        print_addr_ip_int(request.second.ip);
     }
 
-    // If no ARP request exists for this IP, create a new one
-    std::cout << "No ARP request exists for IP, creating new one." << std::endl;
-    ArpRequest newRequest{ip, now, 1, {}};
-    requests[ip] = std::move(newRequest);
+    spdlog::debug("Looking for queued packets for IP:");
+    print_addr_ip_int(ip);
 
-    spdlog::info("Allowing ARP request for IP {} as no prior request exists.", ip);
-    std::cout << "TRUE (new request)" << std::endl;
-    lock.unlock();
-    return true;
+    auto it = requests.find(ip);
+    if (it != requests.end()) {
+        return it->second.awaitingPackets;
+    }
+
+    spdlog::warn("No queued packets found for IP:");
+    print_addr_ip_int(ip);
+    return std::nullopt;
+}
+
+void ArpCache::removeRequest(uint32_t ip) {
+    std::unique_lock lock(mutex); // Ensure thread safety
+
+    auto it = requests.find(ip);
+    if (it != requests.end()) {
+        // Remove the ARP request entry
+        spdlog::info("Removing ARP request for IP:");
+        print_addr_ip_int(ip);
+        requests.erase(it);
+    } else {
+        spdlog::warn("Attempted to remove non-existent ARP request for IP:");
+        print_addr_ip_int(ip);
+    }
 }

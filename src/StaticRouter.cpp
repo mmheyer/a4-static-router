@@ -66,7 +66,7 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
     if(etype == ethertype_arp){
         handleARP(packet, iface, ethernet_hdr);
     } else if(etype == ethertype_ip){
-       handleIP(packet, iface, ethernet_hdr);
+       handleIP(packet, iface);
     }
    else{
         spdlog::error("Unsupported EtherType: {:#06x}", etype);
@@ -76,13 +76,16 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
 
 void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, sr_ethernet_hdr_t *ethernet_hdr){
     std::cout << "handleARP" << std::endl;
-    //constexpr inline size_t ARP_PACKET_SIZE = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
-    if(packet.size() < sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t)){
+
+    // constexpr inline size_t ARP_PACKET_SIZE = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
+
+    if (packet.size() < sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t)) {
         spdlog::error("Packet not large enough to contain ARP.");
         return; 
     }
 
     auto *arpHeader = reinterpret_cast<sr_arp_hdr_t *>(packet.data() + sizeof(sr_ethernet_hdr_t));
+
     // Print ARP header information
     std::cout << "\n *** ARP Header ***" << std::endl;
     std::cout << "ARP Operation: " << std::hex << ntohs(arpHeader->ar_op) << std::dec << std::endl;
@@ -99,8 +102,6 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
     std::cout << std::endl;
     std::cout << "Target IP: " <<  std::dec << ntohl(arpHeader->ar_tip) << std::endl;
 
-    
-    
     unsigned short op = ntohs(arpHeader->ar_op);
     std::array<unsigned char, 6> macAddr;
     std::copy(std::begin(arpHeader->ar_sha), std::end(arpHeader->ar_sha), macAddr.begin());
@@ -111,7 +112,9 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
 
         // Parse the sender MAC and IP from the ARP reply
         mac_addr senderMac = make_mac_addr(arpHeader->ar_sha);
+        spdlog::info("Sender MAC Address: {}", macToString(senderMac));
         uint32_t senderIp = ntohl(arpHeader->ar_sip);
+        spdlog::info("Sender IP Address: {}", senderIp);
 
         // Validate ARP reply consistency
         // Check if sender IP is the broadcast IP (255.255.255.255)
@@ -128,36 +131,73 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
                 break;
             }
         }
+
+        // if sender MAC is the broadcast MAC
         if (isBroadcastMac) {
             spdlog::warn("Invalid ARP reply: Sender MAC is broadcast. Ignoring.");
             return;
         }
+
         std::cout << "checking request" << std::endl;
-    auto* arpCacheImpl = dynamic_cast<ArpCache*>(arpCache.get());
+        auto* arpCacheImpl = dynamic_cast<ArpCache*>(arpCache.get());
+
+        if (arpCacheImpl == nullptr) {
+            spdlog::error("arpCacheImpl is nullptr. Dynamic cast failed.");
+        } else {
+            spdlog::error("arpCacheImpl is valid. Dynamic cast succeeded.");
+        }
 
         // Check if the ARP cache has an entry or a pending request for this IP
-     auto check = arpCacheImpl->hasRequest(ntohl(senderIp));
+        auto check = arpCacheImpl->hasRequest(senderIp);
         if (!check) {
             spdlog::warn("Unsolicited ARP reply received for IP: {:#08x}. Ignoring.", senderIp);
             return;
         }
         std::cout << "WOOOO" << std::endl;
-           // Update the ARP cache with the new MAC-IP mapping
+
+        // Update the ARP cache with the new MAC-IP mapping
         arpCache->addEntry(senderIp, senderMac);
         spdlog::info("ARP cache updated: IP {:#08x} mapped to MAC .", senderIp);
 
         /// Process pending packets for this IP
-        auto macAddress = arpCache->getEntry(senderIp);
-        if (macAddress) {
-            std::cout << "PROCESS PENDING" << std::endl;
-            spdlog::info("MAC resolved for IP {:#08x}. Sending queued packets.", senderIp);
-            arpCacheImpl->processPending();
-            //TODO: verify process pending is right
-            //TODO make and send reply 
-           
-        }
+        // auto macAddress = arpCache->getEntry(senderIp);
+        // if (macAddress) {
+        //     std::cout << "PROCESS PENDING" << std::endl;
+        //     spdlog::info("MAC resolved for IP {:#08x}. Sending queued packets.", senderIp);
+        //     arpCacheImpl->processPending();
+        //     //TODO: verify process pending is right
+        //     //TODO make and send reply 
+            
+        // }
 
-        }
+        // auto queuedPacketsOpt = arpCacheImpl->getQueuedPackets(senderIp);
+
+        // if (queuedPacketsOpt.has_value()) {
+        //     auto& queuedPackets = queuedPacketsOpt.value(); // Access the list of AwaitingPacket
+
+        //     for (auto& awaitingPacket : queuedPackets) {
+        //         // Extract packet data and interface
+        //         auto& packet = awaitingPacket.packet;
+        //         const auto& queuedIface = awaitingPacket.iface;
+
+        //         // Modify the Ethernet header
+        //         auto* queuedEthHeader = reinterpret_cast<sr_ethernet_hdr_t*>(packet.data());
+        //         std::memcpy(queuedEthHeader->ether_dhost, senderMac.data(), ETHER_ADDR_LEN);
+        //         std::memcpy(queuedEthHeader->ether_shost, routingTable->getRoutingInterface(queuedIface).mac.data(), ETHER_ADDR_LEN);
+
+        //         // Send the packet
+        //         packetSender->sendPacket(packet, queuedIface);
+        //     }
+
+        //     // Clean up processed request
+        //     arpCacheImpl->removeRequest(senderIp);
+
+        //     spdlog::info("Processed all queued packets for IP:");
+        //     print_addr_ip_int(senderIp);
+        // } else {
+        //     spdlog::warn("No queued packets to process for IP:");
+        //     print_addr_ip_int(senderIp);
+        // }
     } else if(op == arp_op_request){
         std::cout << "REQUEST" << std::endl;
         spdlog::info("Received ARP Request");
@@ -240,7 +280,7 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
 }
 
 
-void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethernet_hdr) {
+void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& iface) {
     spdlog::debug("Handling IP packet.");
 
     // Check if packet contains an IP header
@@ -248,6 +288,9 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
         spdlog::error("Packet is too small to contain an IP header.");
         return;
     }
+
+    // Extract ethernet header
+    sr_ethernet_hdr_t *ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t *>(packet.data());
 
     // Extract IP header
     // auto* ipHeader = reinterpret_cast<sr_ip_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t));
@@ -316,27 +359,32 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     }
     
     std::cout << "forward packet" << std::endl;
-    forwardIPPacket(packet, iface, ethernet_hdr, ipHeader);
+    forwardIPPacket(packet, iface);
    
 }
 
 
 
-void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface,
-                                   sr_ethernet_hdr_t* ethernet_hdr, sr_ip_hdr_t* ipHeader) {
+void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface) {
     std::cout << "*** wip in forwardip packet" << std::endl;
 
+    // Extract ethernet header
+    sr_ethernet_hdr_t *ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t *>(packet.data());
 
-    // Print IP header (assuming sr_ip_hdr_t is a struct with IP addresses and protocol)
+    // Extract IP header
+    sr_ip_hdr_t *ipHeader = reinterpret_cast<sr_ip_hdr_t *>(packet.data() + sizeof(sr_ethernet_hdr_t));
+
+    // Print IP header
     std::cout << "[IP Header] Source IP: " << (int)(ipHeader->ip_src)<< std::endl;
     std::cout << "[IP Header] Destination IP: " << (int)(ipHeader->ip_dst) << std::endl;
     std::cout << "[IP Header] Protocol: " << (int)(ipHeader->ip_p) << std::endl;
     std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
 
+    // Extract packet payload
     uint8_t *payload = packet.data() + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t);
     size_t payload_len = ntohs(ipHeader->ip_len) - sizeof(sr_ip_hdr_t);
-    //checksum 
 
+    // Verify checksum
     uint16_t originalChecksum = ipHeader->ip_sum;
     ipHeader->ip_sum = 0;  // Set checksum field to 0 for validation
     uint16_t calculatedChecksum = cksum(reinterpret_cast<uint16_t*>(ipHeader), sizeof(sr_ip_hdr_t));
@@ -363,7 +411,11 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     ipHeader->ip_sum = cksum(ipHeader, sizeof(sr_ip_hdr_t));
 
     // Lookup routing table
+    spdlog::debug("Getting routing entry for IP:");
+    print_addr_ip_int(ipHeader->ip_dst);
     auto route = routingTable->getRoutingEntry(ipHeader->ip_dst);
+    spdlog::debug("Interface returned from get routing entry: {}", route->iface);
+
     if (route->gateway == 0) {
         std::cout << "[FORWARD IP] dest unreachable in forwarding" << std::endl;
          mac_addr sourceMAC = extractDestinationMAC(ethernet_hdr);
@@ -389,7 +441,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         packetSender->sendPacket(packet, route->iface);
     } else {
        std::cout << "[FORWARD IP] queue" << std::endl;
-        arpCache->queuePacket(route->dest, packet, route->iface);
+        arpCache->queuePacket(ntohl(route->gateway), packet, route->iface);
 
         // Send ARP request manually
         std::cout << "[FORWARD IP] sending ARP request manually" << std::endl;
@@ -415,10 +467,13 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         auto senderIP = routingTable->getRoutingInterface(route->iface).ip;
         const uint8_t* senderMac = routingTable->getRoutingInterface(route->iface).mac.data();
         std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
-        arpHeader->ar_sip = htonl(senderIP);
+        // arpHeader->ar_sip = htonl(senderIP);
+        arpHeader->ar_sip = senderIP;
+
         // Target's hardware address is empty for a request
         std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
-        arpHeader->ar_tip = htonl(route->gateway);
+        // arpHeader->ar_tip = htonl(route->gateway);
+        arpHeader->ar_tip = route->gateway;
 
         // Print out the ARP request details
         std::cout << "[ARP Request] Sending ARP request for gateway IP: " << route->gateway
