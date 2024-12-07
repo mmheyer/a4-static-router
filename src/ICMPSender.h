@@ -41,12 +41,12 @@ public:
      * @param code The specific code for the Destination Unreachable message.
      */
     void sendDestinationUnreachable(const std::vector<uint8_t>& originalPacket,
-                                    const mac_addr& sourceMAC,
-                                    uint32_t sourceIP,
-                                    const mac_addr& destMAC,
-                                    uint32_t destIP,
-                                    const std::string& iface,
-                                    DestinationUnreachableCode code);
+                                            const mac_addr& sourceMAC,
+                                            uint32_t sourceIP,
+                                            const mac_addr& destMAC,
+                                            uint32_t destIP,
+                                            const std::string& iface,
+                                            uint8_t icmpCode);
 
     /**
      * @brief Sends an ICMP Time Exceeded message.

@@ -61,7 +61,7 @@ void ArpCache::tick() {
                     extractSourceMAC(ethernet_hdr),
                     extractSourceIP(awaitingPacket.packet),
                     awaitingPacket.iface,
-                    ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE
+                    static_cast<uint8_t>(ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE)
                 );
 
 

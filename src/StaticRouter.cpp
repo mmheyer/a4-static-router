@@ -46,8 +46,8 @@ void StaticRouter::handlePacket(std::vector<uint8_t> packet, std::string iface)
     }
     std::cout << std::dec << std::endl;
 
-    // auto* ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t*>(packet.data());
-    sr_ethernet_hdr_t *ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t *>(packet.data());
+    auto* ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t*>(packet.data());
+    // sr_ethernet_hdr_t *ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t *>(packet.data());
     uint16_t etype = ntohs(ethernet_hdr->ether_type);
 
     std::cout << "\n *** Ethernet Header ***" << std::endl;
@@ -280,30 +280,24 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     // if the packet's ttl is already 0, we should drop it
     if (ipHeader->ip_ttl <= 0) return;
 
-    // decrement ttl
-    ipHeader->ip_ttl--;
-
-    // if the ttl is 0
-    if (ipHeader->ip_ttl == 0) {
-        spdlog::info("TTL = 0. Sending ICMP time exceeded.");
-        icmpSender->sendTimeExceeded(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface);
-        // sendIcmpMessage(11, 0, ipHeader, payload, payload_len, iface);
+    if (ipHeader->ip_ttl <= 1) {
+        spdlog::info("TTL expired. Sending ICMP Time Exceeded.");
+        icmpSender->sendTimeExceeded(packet, extractSourceMAC(ethernet_hdr), routingTable->getRoutingInterface(iface).ip,
+                                    extractDestinationMAC(ethernet_hdr), ntohl(ipHeader->ip_src), iface);
         return;
     }
-
-    // set checksum to 0
+    ipHeader->ip_ttl--;
     ipHeader->ip_sum = 0;
-
-    // recompute checksum
-    ipHeader->ip_sum = cksum(ipHeader, sizeof(ipHeader));
+    ipHeader->ip_sum = cksum(reinterpret_cast<uint16_t*>(ipHeader), sizeof(sr_ip_hdr_t));
 
     // find out which entry in the routing table has the longest prefix match with the destination IP address
-    auto route = routingTable->getRoutingEntry(ipHeader->ip_dst);
+    // auto route = routingTable->getRoutingEntry(ipHeader->ip_dst);
+    auto route = routingTable->getRoutingEntry(ntohl(ipHeader->ip_dst));
 
     // if there is no route to the destination network
     if (route == std::nullopt) {
         spdlog::info("No route to network. Sending ICMP destination unreachable.");
-        icmpSender->sendDestinationUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
+        icmpSender->sendDestinationUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface, static_cast<uint8_t>(ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE));
         // sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
         return;
     }
@@ -318,9 +312,9 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
         return;
     }
 
-    // send an ARP request for the next-hop IP (if one hasn't been sent within the last second), 
-    // and add the packet to the queue of packets waiting on this ARP request
-    arpCache->queuePacket(route->gateway, packet, iface);
+//     // send an ARP request for the next-hop IP (if one hasn't been sent within the last second), 
+//     // and add the packet to the queue of packets waiting on this ARP request
+//     arpCache->queuePacket(route->gateway, packet, iface);
 }
 
 
@@ -361,7 +355,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         mac_addr destMAC = extractSourceMAC(ethernet_hdr);
 
          // Call sendDestinationUnreachable
-         icmpSender->sendDestinationUnreachable(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
+         icmpSender->sendDestinationUnreachable(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface, static_cast<uint8_t>(ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE));
         // sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
         return;
     }
@@ -378,6 +372,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         packetSender->sendPacket(packet, route->iface);
     } else {
         std::cout << "[FORWARD IP] queue" << std::endl;
+        spdlog::info("No ARP entry for next hop. Queueing packet and sending ARP request.");
         // Queue the packet and send ARP request
         arpCache->queuePacket(route->gateway, packet, route->iface);
         std::cout << "[FORWARD IP] send arp req" << std::endl;
