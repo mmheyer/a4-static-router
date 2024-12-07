@@ -15,6 +15,7 @@ StaticRouter::StaticRouter(std::unique_ptr<IArpCache> arpCache, std::shared_ptr<
     : routingTable(routingTable)
       , packetSender(packetSender)
       , arpCache(std::move(arpCache))
+      , icmpSender(std::make_shared<ICMPSender>(this->packetSender))
       , arpSender(std::make_shared<ARPSender>(this->packetSender))
 {
 }
@@ -233,21 +234,21 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     std::cout << "[IP Header] Protocol: " << (int)(ipHeader->ip_p) << std::endl;
     std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
 
-    // // The source MAC address should be the MAC address of the router’s interface that is sending the ICMP message.
-	// // This is the MAC address associated with the interface on which the original packet was received.
-    // mac_addr icmpSourceMAC = routingTable->getRoutingInterface(iface).mac;
+    // The source MAC address should be the MAC address of the router’s interface that is sending the ICMP message.
+	// This is the MAC address associated with the interface on which the original packet was received.
+    mac_addr icmpSourceMAC = routingTable->getRoutingInterface(iface).mac;
 
-    // // The destination MAC address should be the MAC address of the device that sent the original packet (i.e., the packet that triggered the ICMP message).
-	// // This is typically the source MAC address from the original Ethernet header.
-    // mac_addr icmpDestMAC = extractSourceMAC(packet);
+    // The destination MAC address should be the MAC address of the device that sent the original packet (i.e., the packet that triggered the ICMP message).
+	// This is typically the source MAC address from the original Ethernet header.
+    mac_addr icmpDestMAC = extractSourceMAC(ethernet_hdr);
 
-    // // The source IP address should be the IP address of the router’s interface that is sending the ICMP message.
-	// // This is the IP address associated with the interface on which the original packet was received.
-    // ip_addr icmpSourceIP = routingTable->getRoutingInterface(iface).ip;
+    // The source IP address should be the IP address of the router’s interface that is sending the ICMP message.
+	// This is the IP address associated with the interface on which the original packet was received.
+    ip_addr icmpSourceIP = routingTable->getRoutingInterface(iface).ip;
 
-    // // The destination IP address should be the source IP address from the original packet’s IP header.
-	// // This is the IP address of the device that sent the packet which caused the ICMP message to be generated.
-    // ip_addr icmpDestIP = ipHeader->ip_src;
+    // The destination IP address should be the source IP address from the original packet’s IP header.
+	// This is the IP address of the device that sent the packet which caused the ICMP message to be generated.
+    ip_addr icmpDestIP = ipHeader->ip_src;
 
     // for each interface in the routing table
     for (const auto& [ifaceName, ifaceInfo] : routingTable->getRoutingInterfaces()) {
@@ -267,8 +268,8 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
             // if the packet contains a TCP or UDP payload
             else if (ipHeader->ip_p == ip_protocol_tcp || ipHeader->ip_p == ip_protocol_udp) {
                 spdlog::info("Packet contains TCP or UDP payload. Sending ICMP port unreachable.");
-                // icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface);
-                sendIcmpMessage(3, 3, ipHeader, payload, payload_len, iface);
+                icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface);
+                // sendIcmpMessage(3, 3, ipHeader, payload, payload_len, iface);
             }
             // otherwise, discard the packet
             return;
@@ -285,8 +286,8 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     // if the ttl is 0
     if (ipHeader->ip_ttl == 0) {
         spdlog::info("TTL = 0. Sending ICMP time exceeded.");
-        // icmpSender->sendTimeExceeded(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface);
-        sendIcmpMessage(11, 0, ipHeader, payload, payload_len, iface);
+        icmpSender->sendTimeExceeded(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface);
+        // sendIcmpMessage(11, 0, ipHeader, payload, payload_len, iface);
         return;
     }
 
@@ -302,30 +303,24 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     // if there is no route to the destination network
     if (route == std::nullopt) {
         spdlog::info("No route to network. Sending ICMP destination unreachable.");
-        // icmpSender->sendDestinationUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
-        sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
+        icmpSender->sendDestinationUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
+        // sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
         return;
     }
 
-    // ensure ARP request is send after queueing the packet
-    uint32_t nextHopIP = route->gateway;
-    if (!arpCache->getEntry(nextHopIP)) {
-        spdlog::info("Queueing packet for IP: {:#010x}", nextHopIP);
-        arpCache->queuePacket(nextHopIP, packet, iface);
+    // check ARP cache for the next hop
+    auto nextHopMac = arpCache->getEntry(route->gateway);
 
-        // Trigger ARP request
-        auto route = routingTable->getRoutingEntry(nextHopIP);
-        if (route) {
-            arpSender->sendArpRequest(
-                route->gateway,
-                routingTable->getRoutingInterface(route->iface).ip,
-                routingTable->getRoutingInterface(route->iface).mac.data(),
-                route->iface
-            );
-        } else {
-            spdlog::error("No route found for next hop IP: {:#010x}", nextHopIP);
-        }
+    // if entry is in the ARP cache
+    if (nextHopMac != std::nullopt) {
+        spdlog::info("Destination IP does not match any router interface. Forwarding packet.");
+        forwardIPPacket(packet, iface, ethernet_hdr, ipHeader);
+        return;
     }
+
+    // send an ARP request for the next-hop IP (if one hasn't been sent within the last second), 
+    // and add the packet to the queue of packets waiting on this ARP request
+    arpCache->queuePacket(route->gateway, packet, iface);
 }
 
 
@@ -348,11 +343,11 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     ipHeader->ip_ttl--;
     if (ipHeader->ip_ttl <= 0) {
         std::cout << "[FORWARD IP] ttl = 0" << std::endl;
-         mac_addr sourceMAC = extractSourceMAC(packet);
-         mac_addr destMAC = extractSourceMAC(packet);
+        mac_addr sourceMAC = extractDestinationMAC(ethernet_hdr);
+        mac_addr destMAC = extractSourceMAC(ethernet_hdr);
 
-        // icmpSender->sendTimeExceeded(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface);
-        sendIcmpMessage(11, 0, ipHeader, payload, payload_len, iface); // Time Exceeded
+        icmpSender->sendTimeExceeded(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface);
+        // sendIcmpMessage(11, 0, ipHeader, payload, payload_len, iface); // Time Exceeded
         return;
     }
     ipHeader->ip_sum = 0;
@@ -362,12 +357,12 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     auto route = routingTable->getRoutingEntry(ntohl(ipHeader->ip_dst));
     if (!route) {
         std::cout << "[FORWARD IP] dest unreachable in forwarding" << std::endl;
-         mac_addr sourceMAC = extractSourceMAC(packet);
-        mac_addr destMAC = extractSourceMAC(packet);
+         mac_addr sourceMAC = extractDestinationMAC(ethernet_hdr);
+        mac_addr destMAC = extractSourceMAC(ethernet_hdr);
 
          // Call sendDestinationUnreachable
-         // icmpSender->sendDestinationUnreachable(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
-        sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
+         icmpSender->sendDestinationUnreachable(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
+        // sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
         return;
     }
     std::cout << "[FORWARD IP] forwarding route found" << std::endl;
@@ -386,10 +381,10 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         // Queue the packet and send ARP request
         arpCache->queuePacket(route->gateway, packet, route->iface);
         std::cout << "[FORWARD IP] send arp req" << std::endl;
-        std::cout << "------------------------------------------------FORWARDIP" << std::endl;
-        arpSender->sendArpRequest(route->gateway, routingTable->getRoutingInterface(route->iface).ip,
-                                 routingTable->getRoutingInterface(route->iface).mac.data(), route->iface);
-        std::cout << "------------------------------------------------FORWARDIP END" << std::endl;
+        // std::cout << "------------------------------------------------FORWARDIP" << std::endl;
+        // arpSender->sendArpRequest(route->gateway, routingTable->getRoutingInterface(route->iface).ip,
+        //                          routingTable->getRoutingInterface(route->iface).mac.data(), route->iface);
+        // std::cout << "------------------------------------------------FORWARDIP END" << std::endl;
 
       
     }
@@ -412,7 +407,7 @@ void StaticRouter::handleICMPEchoRequest(std::vector<uint8_t>& packet, const std
     ipHeader->ip_src = ipHeader->ip_dst;
     ipHeader->ip_dst = tempIP; // swap source and destination IPs
 
-    ipHeader->ip_ttl = 64; // reset TTL
+    ipHeader->ip_ttl = INIT_TTL; // reset TTL
     ipHeader->ip_sum = 0; //  IP checksum
     ipHeader->ip_sum = cksum(reinterpret_cast<uint16_t*>(ipHeader), sizeof(sr_ip_hdr_t));
 
@@ -435,65 +430,66 @@ Packet StaticRouter::createPacket(const sr_ip_hdr_t *ipHeader, const uint8_t *pa
     return packet;
 }
 
-void StaticRouter::sendIcmpMessage(uint8_t type, uint8_t code, const sr_ip_hdr_t *original_ip_hdr,
-                        const uint8_t *payload, size_t payload_len, const std::string &out_iface) {
-    size_t icmp_len = sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
-    Packet packet(sizeof(sr_ethernet_hdr_t) + icmp_len);
+// void StaticRouter::sendIcmpMessage(uint8_t type, uint8_t code, const sr_ip_hdr_t *original_ip_hdr,
+//                         const uint8_t *payload, size_t payload_len, const std::string &out_iface) {
+//     size_t icmp_len = sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+//     Packet packet(sizeof(sr_ethernet_hdr_t) + icmp_len);
 
-    // Ethernet header
-    sr_ethernet_hdr_t *ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t *>(packet.data());
-    memset(ethernet_hdr, 0, sizeof(sr_ethernet_hdr_t));
+//     // Ethernet header
+//     sr_ethernet_hdr_t *ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t *>(packet.data());
+//     memset(ethernet_hdr, 0, sizeof(sr_ethernet_hdr_t));
 
-    // Set source MAC address (router's MAC address for out_iface)
-    auto src_mac = routingTable->getRoutingInterface(out_iface); // Function that returns MAC address for out_iface
-    if (std::all_of(src_mac.mac.begin(), src_mac.mac.end(), [](unsigned char c) { return c == 0; })) {
-        spdlog::error("MAC address is all zeroes.");
-        return; // Handle error
-    }
-    spdlog::info("Source MAC: {}", fmt::format("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-    src_mac.mac[0], src_mac.mac[1], src_mac.mac[2], src_mac.mac[3], src_mac.mac[4], src_mac.mac[5]));
-    memcpy(ethernet_hdr->ether_shost, src_mac.mac.data() ,ETHER_ADDR_LEN); // Set source MAC
+//     // Set source MAC address (router's MAC address for out_iface)
+//     auto src_mac = routingTable->getRoutingInterface(out_iface); // Function that returns MAC address for out_iface
+//     if (std::all_of(src_mac.mac.begin(), src_mac.mac.end(), [](unsigned char c) { return c == 0; })) {
+//         spdlog::error("MAC address is all zeroes.");
+//         return; // Handle error
+//     }
+//     spdlog::info("Source MAC: {}", fmt::format("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+//     src_mac.mac[0], src_mac.mac[1], src_mac.mac[2], src_mac.mac[3], src_mac.mac[4], src_mac.mac[5]));
+//     memcpy(ethernet_hdr->ether_shost, src_mac.mac.data() ,ETHER_ADDR_LEN); // Set source MAC
 
 
-     // Set destination MAC address
-    auto routing_entry = routingTable->getRoutingEntry(original_ip_hdr->ip_src); // Get routing entry for sender's IP
-    if (!routing_entry) {
-        spdlog::error("Failed to find routing entry for IP {}", original_ip_hdr->ip_src);
-        return; // Handle error (e.g., drop packet or handle ARP)
-    }
+//      // Set destination MAC address
+//     auto routing_entry = routingTable->getRoutingEntry(original_ip_hdr->ip_src); // Get routing entry for sender's IP
+//     if (!routing_entry) {
+//         spdlog::error("Failed to find routing entry for IP {}", original_ip_hdr->ip_src);
+//         return; // Handle error (e.g., drop packet or handle ARP)
+//     }
 
-    // Get the MAC address for the destination IP (from the routing entry)
-    auto dest_routing_iface = routingTable->getRoutingInterface(routing_entry->iface); 
-    memcpy(ethernet_hdr->ether_dhost, dest_routing_iface.mac.data(), ETHER_ADDR_LEN); // Set destination MAC
+//     // Get the MAC address for the destination IP (from the routing entry)
+//     auto dest_routing_iface = routingTable->getRoutingInterface(routing_entry->iface); 
+//     memcpy(ethernet_hdr->ether_dhost, dest_routing_iface.mac.data(), ETHER_ADDR_LEN); // Set destination MAC
 
-    // Set ether type 
-    ethernet_hdr->ether_type = htons(ethertype_ip);
 
-    // IP header
-    sr_ip_hdr_t *ipHeader = reinterpret_cast<sr_ip_hdr_t *>(packet.data() + sizeof(sr_ethernet_hdr_t));
-    memset(ipHeader, 0, sizeof(sr_ip_hdr_t));
-    ipHeader->ip_hl = 5;
-    ipHeader->ip_v = 4;
-    ipHeader->ip_tos = 0;
-    ipHeader->ip_len = htons(icmp_len);
-    ipHeader->ip_id = htons(0);
-    ipHeader->ip_off = htons(0);
-    ipHeader->ip_ttl = 64;
-    ipHeader->ip_p = ip_protocol_icmp;
-    ipHeader->ip_src = original_ip_hdr->ip_dst; // Router's IP
-    ipHeader->ip_dst = original_ip_hdr->ip_src; // Sender's IP
-    ipHeader->ip_sum = 0;
-    ipHeader->ip_sum = cksum(ipHeader, sizeof(sr_ip_hdr_t));
+//     // Set ether type 
+//     ethernet_hdr->ether_type = htons(ethertype_ip);
 
-    // ICMP header
-    sr_icmp_t3_hdr_t *icmp_hdr = reinterpret_cast<sr_icmp_t3_hdr_t *>(packet.data() + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
-    memset(icmp_hdr, 0, sizeof(sr_icmp_t3_hdr_t));
-    icmp_hdr->icmp_type = type;
-    icmp_hdr->icmp_code = code;
-    memcpy(icmp_hdr->data, original_ip_hdr, sizeof(sr_ip_hdr_t) + 8); // Include original IP header and 8 bytes of payload
-    icmp_hdr->icmp_sum = 0;
-    icmp_hdr->icmp_sum = cksum(icmp_hdr, sizeof(sr_icmp_t3_hdr_t));
+//     // IP header
+//     sr_ip_hdr_t *ipHeader = reinterpret_cast<sr_ip_hdr_t *>(packet.data() + sizeof(sr_ethernet_hdr_t));
+//     memset(ipHeader, 0, sizeof(sr_ip_hdr_t));
+//     ipHeader->ip_hl = 5;
+//     ipHeader->ip_v = 4;
+//     ipHeader->ip_tos = 0;
+//     ipHeader->ip_len = htons(icmp_len);
+//     ipHeader->ip_id = htons(0);
+//     ipHeader->ip_off = htons(0);
+//     ipHeader->ip_ttl = 64;
+//     ipHeader->ip_p = ip_protocol_icmp;
+//     ipHeader->ip_src = original_ip_hdr->ip_dst; // Router's IP
+//     ipHeader->ip_dst = original_ip_hdr->ip_src; // Sender's IP
+//     ipHeader->ip_sum = 0;
+//     ipHeader->ip_sum = cksum(ipHeader, sizeof(sr_ip_hdr_t));
 
-    // Send the packet
-    packetSender->sendPacket(packet, out_iface);
-}
+//     // ICMP header
+//     sr_icmp_t3_hdr_t *icmp_hdr = reinterpret_cast<sr_icmp_t3_hdr_t *>(packet.data() + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+//     memset(icmp_hdr, 0, sizeof(sr_icmp_t3_hdr_t));
+//     icmp_hdr->icmp_type = type;
+//     icmp_hdr->icmp_code = code;
+//     memcpy(icmp_hdr->data, original_ip_hdr, sizeof(sr_ip_hdr_t) + 8); // Include original IP header and 8 bytes of payload
+//     icmp_hdr->icmp_sum = 0;
+//     icmp_hdr->icmp_sum = cksum(icmp_hdr, sizeof(sr_icmp_t3_hdr_t));
+
+//     // Send the packet
+//     packetSender->sendPacket(packet, out_iface);
+// }

@@ -15,7 +15,7 @@ struct ArpEntry {
 
 struct AwaitingPacket {
   Packet packet;     /**< Packet that is awaiting the ARP response. */
-  std::string iface; /**< Interface on which the packet came in */
+  std::string iface; /**< Interface the packet is going out on. */
 };
 
 struct ArpRequest {
@@ -53,7 +53,7 @@ public:
    address is resolved.
    * @param ip The IP address to which the packet should be sent.
    * @param packet The packet to send.
-   * @param iface The interface the packet came in on.
+   * @param iface The interface the packet is going out on.
    */
   virtual void queuePacket(uint32_t ip, const Packet &packet,
                            const std::string &iface) = 0;

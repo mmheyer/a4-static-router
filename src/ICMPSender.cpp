@@ -8,16 +8,16 @@
 ICMPSender::ICMPSender(std::shared_ptr<IPacketSender> packetSender)
     : packetSender_(std::move(packetSender)) {}
 
-void ICMPSender::sendEchoReply(const std::vector<uint8_t>& requestPacket,
-                               const mac_addr& sourceMAC,
-                               uint32_t sourceIP,
-                               const std::string& iface) {
-    uint32_t destIP = extractSourceIP(requestPacket);
-    mac_addr destMAC = extractSourceMAC(requestPacket);
+// void ICMPSender::sendEchoReply(const std::vector<uint8_t>& requestPacket,
+//                                const mac_addr& sourceMAC,
+//                                uint32_t sourceIP,
+//                                const std::string& iface) {
+//     uint32_t destIP = extractSourceIP(requestPacket);
+//     mac_addr destMAC = extractSourceMAC(requestPacket);
 
-    auto icmpPacket = constructICMPPacket(requestPacket, sourceIP, destIP, sourceMAC, destMAC, 0, 0);
-    packetSender_->sendPacket(icmpPacket, iface);
-}
+//     auto icmpPacket = constructICMPPacket(requestPacket, sourceIP, destIP, sourceMAC, destMAC, 0, 0);
+//     packetSender_->sendPacket(icmpPacket, iface);
+// }
 
 void ICMPSender::sendDestinationUnreachable(const std::vector<uint8_t>& originalPacket,
                                             const mac_addr& sourceMAC,
@@ -62,6 +62,7 @@ std::vector<uint8_t> ICMPSender::constructICMPPacket(const std::vector<uint8_t>&
     std::cout << "[Constructing ICMP packet] : Source MAC: " << macToString(sourceMAC) << std::endl;
     std::cout << "[Constructing ICMP packet] : Destination MAC: " << macToString(destMAC) << std::endl;
     std::cout << "[Constructing ICMP packet] : Ethernet Type: 0x" << std::hex << ntohs(ethHeader->ether_type) << std::dec << std::endl;
+    
     // IP header
     auto* ipHeader = reinterpret_cast<sr_ip_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t));
     ipHeader->ip_v = 4;
@@ -70,7 +71,7 @@ std::vector<uint8_t> ICMPSender::constructICMPPacket(const std::vector<uint8_t>&
     ipHeader->ip_len = htons(packet.size() - sizeof(sr_ethernet_hdr_t));
     ipHeader->ip_id = 0;
     ipHeader->ip_off = 0;
-    ipHeader->ip_ttl = 64;
+    ipHeader->ip_ttl = INIT_TTL;
     ipHeader->ip_p = ip_protocol_icmp;
     ipHeader->ip_src = sourceIP; // check this
     ipHeader->ip_dst = destIP;

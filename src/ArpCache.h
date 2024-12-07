@@ -34,6 +34,8 @@ public:
 
     void queuePacket(uint32_t ip, const Packet& packet, const std::string& iface) override;
 
+    bool shouldSendArpRequest(uint32_t destIp);
+
 private:
     void loop();
 
@@ -49,9 +51,8 @@ private:
     std::unordered_map<ip_addr, ArpEntry> entries;
     std::unordered_map<ip_addr, ArpRequest> requests;
 
-    void handleDestHostUnreachable(ArpRequest& req);
-    void retryArpRequest(ArpRequest& req);
-    void sendArpRequest(uint32_t targetIP, const std::string& iface);
+    std::shared_ptr<ICMPSender> icmpSender;
+    std::shared_ptr<ARPSender> arpSender;
 };
 
 #endif //ARPCACHE_H
