@@ -351,7 +351,6 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
             else if (ipHeader->ip_p == ip_protocol_tcp || ipHeader->ip_p == ip_protocol_udp) {
                 spdlog::info("Packet contains TCP or UDP payload. Sending ICMP port unreachable.");
                 icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIP, icmpDestMAC, icmpDestIP, iface);
-                // sendIcmpMessage(3, 3, ipHeader, payload, payload_len, iface);
             }
             // otherwise, discard the packet
             return;
@@ -403,8 +402,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         mac_addr sourceMAC = extractDestinationMAC(ethernet_hdr);
         mac_addr destMAC = extractSourceMAC(ethernet_hdr);
 
-        icmpSender->sendTimeExceeded(packet, sourceMAC, ipHeader->ip_src, destMAC, ipHeader->ip_dst, iface);
-        // sendIcmpMessage(11, 0, ipHeader, payload, payload_len, iface); // Time Exceeded
+        icmpSender->sendTimeExceeded(packet, sourceMAC, ipHeader->ip_dst, destMAC, ipHeader->ip_src, iface);
         return;
     }
     ipHeader->ip_sum = 0;
