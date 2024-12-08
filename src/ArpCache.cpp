@@ -88,13 +88,16 @@ void ArpCache::processRequest(ArpRequest& req) {
 
             std::cout << "[DEBUG] Interface Name: " << awaitingPacket.iface << std::endl;
             std::cout << "[DEBUG] ICMP Code: " << static_cast<int>(ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE) << std::endl;                
-                std::cout << "Sent ICMP Destination Host Unreachable for packet on interface: " << awaitingPacket.iface << "\n";
-
+            std::cout << "Sent ICMP Destination Host Unreachable for packet on interface: " << awaitingPacket.iface << "\n";
         }
 
         // remove the request
-        requests.erase(req.ip);
-        spdlog::debug("Removed request for IP {} due to destination unreachable.");
+        if (requests.find(req.ip) != requests.end()) {
+            requests.erase(req.ip);
+            spdlog::debug("Removed request for IP {} due to destination unreachable.");
+        } else {
+            spdlog::error("Cannot find IP {} in the map.", req.ip);
+        }
     // if the request has been sent 0 times or last sent more than a second ago
     } else if (req.timesSent == 0 || (now - req.lastSent >= std::chrono::seconds(1))) {
         // retry the ARP request
@@ -140,7 +143,8 @@ void ArpCache::sendArpRequest(uint32_t targetIP, uint32_t senderIP, const uint8_
 
     // Sender's hardware and protocol addresses
     std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
-    arpHeader->ar_sip = htonl(senderIP);
+    // arpHeader->ar_sip = htonl(senderIP);
+    arpHeader->ar_sip = senderIP;
 
     // Target's hardware address is empty for a request
     std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);

@@ -8,7 +8,7 @@
 #include "IPacketSender.h"
 #include "IRoutingTable.h"
 #include "ICMPSender.h"
-#include "ARPSender.h"
+// #include "ARPSender.h"
 #include "ArpCache.h"
 
 class StaticRouter {
@@ -41,7 +41,7 @@ private:
     std::unique_ptr<IArpCache> arpCache; // ARP cache for resolving ip-to-mac mappings
 
     std::shared_ptr<ICMPSender> icmpSender; // Sends ICMP error and echo reply msgs
-    std::shared_ptr<ARPSender> arpSender;
+    // std::shared_ptr<ARPSender> arpSender;
 
     Packet createPacket(const sr_ip_hdr_t *ip_hdr, const uint8_t *payload, size_t payload_len);
     // void sendIcmpMessage(uint8_t type, uint8_t code, const sr_ip_hdr_t *original_ip_hdr,

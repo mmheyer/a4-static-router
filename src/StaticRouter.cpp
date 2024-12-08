@@ -16,7 +16,6 @@ StaticRouter::StaticRouter(std::unique_ptr<IArpCache> arpCache, std::shared_ptr<
       , packetSender(packetSender)
       , arpCache(std::move(arpCache))
       , icmpSender(std::make_shared<ICMPSender>(this->packetSender))
-      , arpSender(std::make_shared<ARPSender>(this->packetSender))
 {
 }
 
@@ -159,46 +158,6 @@ void StaticRouter::handleARP(std::vector<uint8_t> &packet, std::string &iface, s
         // Update the ARP cache with the new MAC-IP mapping
         arpCache->addEntry(senderIp, senderMac);
         spdlog::info("ARP cache updated: IP {:#08x} mapped to MAC .", senderIp);
-
-        /// Process pending packets for this IP
-        // auto macAddress = arpCache->getEntry(senderIp);
-        // if (macAddress) {
-        //     std::cout << "PROCESS PENDING" << std::endl;
-        //     spdlog::info("MAC resolved for IP {:#08x}. Sending queued packets.", senderIp);
-        //     arpCacheImpl->processPending();
-        //     //TODO: verify process pending is right
-        //     //TODO make and send reply 
-            
-        // }
-
-        // auto queuedPacketsOpt = arpCacheImpl->getQueuedPackets(senderIp);
-
-        // if (queuedPacketsOpt.has_value()) {
-        //     auto& queuedPackets = queuedPacketsOpt.value(); // Access the list of AwaitingPacket
-
-        //     for (auto& awaitingPacket : queuedPackets) {
-        //         // Extract packet data and interface
-        //         auto& packet = awaitingPacket.packet;
-        //         const auto& queuedIface = awaitingPacket.iface;
-
-        //         // Modify the Ethernet header
-        //         auto* queuedEthHeader = reinterpret_cast<sr_ethernet_hdr_t*>(packet.data());
-        //         std::memcpy(queuedEthHeader->ether_dhost, senderMac.data(), ETHER_ADDR_LEN);
-        //         std::memcpy(queuedEthHeader->ether_shost, routingTable->getRoutingInterface(queuedIface).mac.data(), ETHER_ADDR_LEN);
-
-        //         // Send the packet
-        //         packetSender->sendPacket(packet, queuedIface);
-        //     }
-
-        //     // Clean up processed request
-        //     arpCacheImpl->removeRequest(senderIp);
-
-        //     spdlog::info("Processed all queued packets for IP:");
-        //     print_addr_ip_int(senderIp);
-        // } else {
-        //     spdlog::warn("No queued packets to process for IP:");
-        //     print_addr_ip_int(senderIp);
-        // }
     } else if(op == arp_op_request){
         std::cout << "REQUEST" << std::endl;
         spdlog::info("Received ARP Request");
