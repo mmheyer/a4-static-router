@@ -318,10 +318,7 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
 
     mac_addr icmpSourceMAC = extractDestinationMAC(ethernet_hdr);
-    mac_addr icmpSourceMAC = extractDestinationMAC(ethernet_hdr);
     mac_addr icmpDestMAC = extractSourceMAC(ethernet_hdr);
-    ip_addr icmpSourceIp = routingTable->getRoutingInterface(iface).ip;
-    ip_addr icmpDestIp = ipHeader->ip_src;
     ip_addr icmpSourceIp = routingTable->getRoutingInterface(iface).ip;
     ip_addr icmpDestIp = ipHeader->ip_src;
 
