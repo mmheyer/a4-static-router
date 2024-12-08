@@ -35,10 +35,10 @@ public:
     void queuePacket(uint32_t ip, const Packet& packet, const std::string& iface) override;
 
     bool hasRequest(uint32_t senderIp);
-    void processPending();
+    // void processPending();
     // bool shouldSendArpRequest(uint32_t destIp);
     std::optional<std::__cxx11::list<AwaitingPacket>> getQueuedPackets(uint32_t ip);
-    void removeRequest(uint32_t ip);
+    // void removeRequest(uint32_t ip);
 
 private:
     void loop();
