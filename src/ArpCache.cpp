@@ -93,14 +93,16 @@ void ArpCache::tick() {
     std::unique_lock lock(mutex);
 
     auto now = std::chrono::steady_clock::now();
-    std::vector<uint32_t> requestsToRemove; // Collect IPs to erase after processing
+    // std::vector<uint32_t> requestsToRemove; // Collect IPs to erase after processing
 
+    spdlog::debug("There are currently {} requests.", requests.size());
     for (auto& [ip, req] : requests) {
         std::cout << "Processing ARP request for IP: " << ip << ", timesSent: " << req.timesSent
                   << ", lastSent: " << std::chrono::duration_cast<std::chrono::milliseconds>(now - req.lastSent).count()
                   << " ms ago.\n";
 
         // Check if a request has timed out (sent 7 times with no reply)
+        spdlog::debug("Request has been sent {} times.", req.timesSent);
         if (req.timesSent >= 7) {
             std::cout << "Max retries reached for IP " << ip << ". Sending ICMP Destination Host Unreachable.\n";
             spdlog::warn("ARP request for IP {} failed after {} attempts. Sending ICMP Destination Host Unreachable.", ip, req.timesSent);
@@ -203,7 +205,7 @@ void ArpCache::addEntry(uint32_t ip, const mac_addr& mac) {
         }
 
         requests.erase(it);
-
+        spdlog::debug("Removed request. There are now {} requests.", requests.size());
     }
 }
 

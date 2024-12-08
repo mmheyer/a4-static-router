@@ -49,6 +49,7 @@ std::vector<uint8_t> ICMPSender::constructICMPPacket(const std::vector<uint8_t>&
                                                      const mac_addr& destMAC,
                                                      uint8_t icmpType,
                                                      uint8_t icmpCode) {
+    // Allocate packet size
     std::vector<uint8_t> packet(sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t));
     spdlog::debug("Constructing ICMP packet.");
 
@@ -58,11 +59,6 @@ std::vector<uint8_t> ICMPSender::constructICMPPacket(const std::vector<uint8_t>&
     memcpy(ethHeader->ether_dhost, destMAC.data(), ETHER_ADDR_LEN);
     ethHeader->ether_type = htons(ethertype_ip);
 
-    std::cout << "[Constructing ICMP packet] : Ethernet Header:" << std::endl;
-    std::cout << "[Constructing ICMP packet] : Source MAC: " << macToString(sourceMAC) << std::endl;
-    std::cout << "[Constructing ICMP packet] : Destination MAC: " << macToString(destMAC) << std::endl;
-    std::cout << "[Constructing ICMP packet] : Ethernet Type: 0x" << std::hex << ntohs(ethHeader->ether_type) << std::dec << std::endl;
-    
     // IP header
     auto* ipHeader = reinterpret_cast<sr_ip_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t));
     ipHeader->ip_v = 4;
@@ -73,40 +69,37 @@ std::vector<uint8_t> ICMPSender::constructICMPPacket(const std::vector<uint8_t>&
     ipHeader->ip_off = 0;
     ipHeader->ip_ttl = INIT_TTL;
     ipHeader->ip_p = ip_protocol_icmp;
-    ipHeader->ip_src = sourceIP; // check this
+    ipHeader->ip_src = sourceIP;
     ipHeader->ip_dst = destIP;
     ipHeader->ip_sum = 0;
     ipHeader->ip_sum = cksum(ipHeader, sizeof(sr_ip_hdr_t));
 
-    std::cout << "[Constructing ICMP packet] : IP Header:" << std::endl;
-    std::cout << "[Constructing ICMP packet] : Source IP: "
-            << ((sourceIP >> 24) & 0xFF) << "."
-            << ((sourceIP >> 16) & 0xFF) << "."
-            << ((sourceIP >> 8) & 0xFF) << "."
-            << (sourceIP & 0xFF) << std::endl;   
-    std::cout << "[Constructing ICMP packet] : Destination IP: "
-          << ((destIP >> 24) & 0xFF) << "."
-          << ((destIP >> 16) & 0xFF) << "."
-          << ((destIP >> 8) & 0xFF) << "."
-          << (destIP & 0xFF) << std::endl;
-    std::cout << "[Constructing ICMP packet] : IP Length: " << ntohs(ipHeader->ip_len) << std::endl;
-    std::cout << "[Constructing ICMP packet] : TTL: " << (int)ipHeader->ip_ttl << std::endl;
-    std::cout << "[Constructing ICMP packet] : Protocol: ICMP (1)" << std::endl; 
     // ICMP header
     auto* icmpHeader = reinterpret_cast<sr_icmp_t3_hdr_t*>(packet.data() + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
     icmpHeader->icmp_type = icmpType;
     icmpHeader->icmp_code = icmpCode;
     icmpHeader->unused = 0;
     icmpHeader->next_mtu = 0;
-    memcpy(icmpHeader->data, originalPacket.data(), std::min(ICMP_DATA_SIZE, static_cast<int>(originalPacket.size())));
+
+    // Copy the original IP header and first 64 bits of payload into ICMP data
+    const size_t ipHeaderSize = sizeof(sr_ip_hdr_t);
+    const size_t maxDataSize = std::min(static_cast<size_t>(ICMP_DATA_SIZE), originalPacket.size());
+    size_t bytesToCopy = std::min(maxDataSize, ipHeaderSize + 8); // IP header + 64 bits (8 bytes)
+
+    if (bytesToCopy > 0) {
+        // memcpy(icmpHeader->data, originalPacket.data(), bytesToCopy);
+        memcpy(icmpHeader->data, originalPacket.data() + ETHERNET_HEADER_SIZE, bytesToCopy);
+    }
+
+    // Zero out remaining space if original packet is smaller
+    if (bytesToCopy < ICMP_DATA_SIZE) {
+        memset(icmpHeader->data + bytesToCopy, 0, ICMP_DATA_SIZE - bytesToCopy);
+    }
+
+    // Compute ICMP checksum
     icmpHeader->icmp_sum = 0;
     icmpHeader->icmp_sum = cksum(icmpHeader, sizeof(sr_icmp_t3_hdr_t));
-    
-    std::cout << "[Constructing ICMP packet] : ICMP Header:" << std::endl;
-    std::cout << "[Constructing ICMP packet] : Type: " << (int)icmpHeader->icmp_type << std::endl;
-    std::cout << "[Constructing ICMP packet] : Code: " << (int)icmpHeader->icmp_code << std::endl;
-    std::cout << "[Constructing ICMP packet] : Checksum: 0x" << std::hex << ntohs(icmpHeader->icmp_sum) << std::dec << std::endl;
-    std::cout << "[Constructing ICMP packet] : Data (first " << std::min(ICMP_DATA_SIZE, static_cast<int>(originalPacket.size())) << " bytes): ";
+
     return packet;
 }
 
