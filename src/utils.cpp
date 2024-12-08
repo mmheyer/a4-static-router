@@ -196,11 +196,10 @@ uint32_t extractSourceIP(const std::vector<uint8_t>& packet) {
     }
 
     // The source IP starts at offset 12 in the IP header
-    const uint8_t* ipHeader = packet.data();
     uint32_t srcIP;
 
     // Copy the 4 bytes of the source IP address
-    std::memcpy(&srcIP, ipHeader + 12, sizeof(srcIP));
+    std::memcpy(&srcIP, packet.data() + ETHER_ADDR_LEN + 12, sizeof(srcIP));
 
     // Convert to host byte order
     return ntohl(srcIP);

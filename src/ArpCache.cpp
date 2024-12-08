@@ -93,7 +93,7 @@ void ArpCache::tick() {
     auto now = std::chrono::steady_clock::now();
     // std::vector<uint32_t> requestsToRemove; // Collect IPs to erase after processing
 
-    spdlog::debug("There are currently {} requests.", requests.size());
+    // spdlog::debug("There are currently {} requests.", requests.size());
     for (auto& [ip, req] : requests) {
         std::cout << "Processing ARP request for IP: " << ip << ", timesSent: " << req.timesSent
                   << ", lastSent: " << std::chrono::duration_cast<std::chrono::milliseconds>(now - req.lastSent).count()
@@ -113,6 +113,7 @@ void ArpCache::tick() {
                 mac_addr sourceMac = extractDestinationMAC(ethernet_hdr);
                 mac_addr destMac = extractSourceMAC(ethernet_hdr);
                 ip_addr destIp = extractSourceIP(awaitingPacket.packet);
+
                 const auto& route = routingTable->getRoutingEntry(destIp);
                 if (!route) {
                     spdlog::error("Can't find routing entry to send ICMP Destination Host Unreachable.");

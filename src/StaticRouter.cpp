@@ -341,7 +341,6 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
             else if (ipHeader->ip_p == ip_protocol_tcp || ipHeader->ip_p == ip_protocol_udp) {
                 spdlog::info("Packet contains TCP or UDP payload. Sending ICMP port unreachable.");
                 icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIp, icmpDestMAC, icmpDestIp, iface);
-                icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIp, icmpDestMAC, icmpDestIp, iface);
             }
             // otherwise, discard the packet
             return;
@@ -407,17 +406,17 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     // otherwise, the frame contains an IP packet whose destination is not one of the router's interfaces
     // if the packet's ttl is already 0, we should drop it
     if (ipHeader->ip_ttl <= 0) return;
-
-    // decrement ttl
-    ipHeader->ip_ttl--;
     
     // if the ttl is 0
-    if (ipHeader->ip_ttl == 0) {
+    if (ipHeader->ip_ttl == 1) {
         spdlog::info("TTL = 0. Sending ICMP time exceeded.");
         icmpSender->sendTimeExceeded(packet, sourceMAC, sourceIp, destMAC, destIp, iface);
         // sendIcmpMessage(11, 0, ipHeader, payload, payload_len, iface);
         return;
     }
+
+    // decrement ttl
+    ipHeader->ip_ttl--;
 
     ipHeader->ip_sum = 0;
     ipHeader->ip_sum = cksum(ipHeader, sizeof(sr_ip_hdr_t));
@@ -433,7 +432,6 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
 
          // Call sendDestinationUnreachable
          icmpSender->sendDestinationUnreachable(packet, sourceMAC, sourceIp, destMAC, destIp, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
-         icmpSender->sendDestinationUnreachable(packet, sourceMAC, sourceIp, destMAC, destIp, iface, ICMPSender::DestinationUnreachableCode::NET_UNREACHABLE);
         // sendIcmpMessage(3, 0, ipHeader, payload, payload_len, iface);
         return;
     }
@@ -441,7 +439,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     std::cout << std::dec << route->dest << route->iface << std::endl;
 
     // Check ARP cache for next-hop MAC
-    auto nextHopMAC = arpCache->getEntry(route->gateway);
+    auto nextHopMAC = arpCache->getEntry(ntohl(route->gateway));
     if (nextHopMAC) {
         std::cout << "[FORWARD IP] next hop" << std::endl;
         // Update Ethernet header with next-hop MAC and router's MAC
