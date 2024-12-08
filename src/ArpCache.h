@@ -34,6 +34,12 @@ public:
 
     void queuePacket(uint32_t ip, const Packet& packet, const std::string& iface) override;
 
+    bool hasRequest(uint32_t senderIp);
+    // void processPending();
+    // bool shouldSendArpRequest(uint32_t destIp);
+    std::optional<std::__cxx11::list<AwaitingPacket>> getQueuedPackets(uint32_t ip);
+    // void removeRequest(uint32_t ip);
+
 private:
     void loop();
 
@@ -49,8 +55,8 @@ private:
     std::unordered_map<ip_addr, ArpEntry> entries;
     std::unordered_map<ip_addr, ArpRequest> requests;
 
-    std::unique_ptr<ICMPSender> icmpSender;
-    std::unique_ptr<ARPSender> arpSender;
+    std::shared_ptr<ICMPSender> icmpSender;
+    std::shared_ptr<ARPSender> arpSender;
 };
 
 #endif //ARPCACHE_H

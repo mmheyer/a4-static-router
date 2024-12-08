@@ -196,11 +196,10 @@ uint32_t extractSourceIP(const std::vector<uint8_t>& packet) {
     }
 
     // The source IP starts at offset 12 in the IP header
-    const uint8_t* ipHeader = packet.data();
     uint32_t srcIP;
 
     // Copy the 4 bytes of the source IP address
-    std::memcpy(&srcIP, ipHeader + 12, sizeof(srcIP));
+    std::memcpy(&srcIP, packet.data() + ETHER_ADDR_LEN + 12, sizeof(srcIP));
 
     // Convert to host byte order
     return ntohl(srcIP);
@@ -234,18 +233,23 @@ uint32_t extractDestinationIP(const std::vector<uint8_t>& packet) {
  * @return The source MAC address as a mac_addr.
  * @throws std::runtime_error if the packet size is smaller than an Ethernet header.
  */
-mac_addr extractSourceMAC(const std::vector<uint8_t>& packet) {
-    // Check if the packet is large enough to contain an Ethernet header
-    if (packet.size() < sizeof(sr_ethernet_hdr_t)) {
-        throw std::runtime_error("Packet too small to contain an Ethernet header.");
-    }
-
-    // Access the Ethernet header
-    const sr_ethernet_hdr_t* ethHeader = reinterpret_cast<const sr_ethernet_hdr_t*>(packet.data());
-
+mac_addr extractSourceMAC(sr_ethernet_hdr_t* ethHeader) {
     // Copy the source MAC address into a mac_addr object
     mac_addr sourceMac;
     std::copy(std::begin(ethHeader->ether_shost), std::end(ethHeader->ether_shost), sourceMac.begin());
 
     return sourceMac;
+}
+
+/**
+ * @brief Extracts the destination MAC address from an Ethernet frame.
+ * @param ethHeader Pointer to the Ethernet header.
+ * @return The destination MAC address as a mac_addr.
+ */
+mac_addr extractDestinationMAC(const sr_ethernet_hdr_t* ethHeader) {
+    // Copy the destination MAC address into a mac_addr object
+    mac_addr destMac;
+    std::copy(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), destMac.begin());
+
+    return destMac;
 }

@@ -18,17 +18,17 @@ public:
 
     explicit ICMPSender(std::shared_ptr<IPacketSender> packetSender);
 
-    /**
-     * @brief Sends an ICMP Echo Reply.
-     * @param requestPacket The original Echo Request packet.
-     * @param sourceMAC The source MAC address for the Ethernet header.
-     * @param sourceIP The source IP address for the reply.
-     * @param iface The interface on which to send the reply.
-     */
-    void sendEchoReply(const std::vector<uint8_t>& requestPacket,
-                       const mac_addr& sourceMAC,
-                       uint32_t sourceIP,
-                       const std::string& iface);
+    // /**
+    //  * @brief Sends an ICMP Echo Reply.
+    //  * @param requestPacket The original Echo Request packet.
+    //  * @param sourceMAC The source MAC address for the Ethernet header.
+    //  * @param sourceIP The source IP address for the reply.
+    //  * @param iface The interface on which to send the reply.
+    //  */
+    // void sendEchoReply(const std::vector<uint8_t>& requestPacket,
+    //                    const mac_addr& sourceMAC,
+    //                    uint32_t sourceIP,
+    //                    const std::string& iface);
 
     /**
      * @brief Sends an ICMP Destination Unreachable message.
@@ -63,6 +63,22 @@ public:
                           const mac_addr& destMAC,
                           uint32_t destIP,
                           const std::string& iface);
+
+    /**
+     * @brief Sends an ICMP Port Unreachable message.
+     * @param originalPacket The original packet causing the error.
+     * @param sourceMAC The source MAC address for the Ethernet header.
+     * @param sourceIP The source IP address for the ICMP message.
+     * @param destMAC The destination MAC address for the Ethernet header.
+     * @param destIP The destination IP address for the ICMP message.
+     * @param iface The interface on which to send the message.
+     */
+    void sendPortUnreachable(const std::vector<uint8_t>& originalPacket,
+                             const mac_addr& sourceMAC,
+                             uint32_t sourceIP,
+                             const mac_addr& destMAC,
+                             uint32_t destIP,
+                             const std::string& iface);
 
 private:
     std::shared_ptr<IPacketSender> packetSender_;

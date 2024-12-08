@@ -9,7 +9,7 @@
 #include "IRoutingTable.h"
 #include "ICMPSender.h"
 #include "ARPSender.h"
-
+#include "ArpCache.h"
 
 class StaticRouter {
 public:
@@ -26,14 +26,14 @@ public:
     void handlePacket(std::vector<uint8_t> packet, std::string iface);
 
 private:
-    void handleIP(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader);
-    void forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader, sr_ip_hdr_t* ipHeader);
+    void handleIP(std::vector<uint8_t>& packet, const std::string& iface);
+    void forwardIPPacket(std::vector<uint8_t>& packet, const std::string& iface);
     void handleICMPEchoRequest(std::vector<uint8_t>& packet, const std::string& iface, sr_ethernet_hdr_t* ethHeader);
-    void sendDestinationUnreachable(const std::vector<uint8_t>& packet,
-                                            const std::string& iface,
-                                            uint32_t sourceIP,
-                                            uint8_t icmpCode);
-uint8_t getICMPType(const std::vector<uint8_t>& packetData);
+    // void sendDestinationUnreachable(const std::vector<uint8_t>& packet,
+    //                                         const std::string& iface,
+    //                                         uint32_t sourceIP,
+    //                                         uint8_t icmpCode);
+    // uint8_t getICMPType(const std::vector<uint8_t>& packetData);
 
     std::mutex mutex;
     std::shared_ptr<IRoutingTable> routingTable; // Routing table for forwarding decisions
@@ -42,6 +42,10 @@ uint8_t getICMPType(const std::vector<uint8_t>& packetData);
 
     std::shared_ptr<ICMPSender> icmpSender; // Sends ICMP error and echo reply msgs
     std::shared_ptr<ARPSender> arpSender;
+
+    Packet createPacket(const sr_ip_hdr_t *ip_hdr, const uint8_t *payload, size_t payload_len);
+    // void sendIcmpMessage(uint8_t type, uint8_t code, const sr_ip_hdr_t *original_ip_hdr,
+                        // const uint8_t *payload, size_t payload_len, const std::string &out_iface);
 };
 
 

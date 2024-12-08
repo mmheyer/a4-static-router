@@ -30,6 +30,7 @@ public:
      */
     void sendArpRequest(uint32_t targetIP, uint32_t senderIP, const uint8_t senderMac[6], const std::string& iface);
 
+
     /**
      * @brief Sends an ARP reply.
      * @param targetIP The target's IP address.
