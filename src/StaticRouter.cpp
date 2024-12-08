@@ -462,7 +462,7 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         // Target's hardware address is empty for a request
         std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
         // arpHeader->ar_tip = htonl(route->gateway);
-        arpHeader->ar_tip = req.ip;
+        arpHeader->ar_tip = route->gateway;
 
         // Print out the ARP request details
         std::cout << "[ARP Request] Sending ARP request for gateway IP: " << route->gateway

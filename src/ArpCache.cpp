@@ -159,8 +159,8 @@ void ArpCache::tick() {
 
             const uint8_t* senderMac = routingTable->getRoutingInterface(req.awaitingPackets.front().iface).mac.data();
             auto senderIP = routingTable->getRoutingInterface(req.awaitingPackets.front().iface).ip;
-            routingTable->getRoutingInterface(req.awaitingPackets.front().iface).
-            spdlog::info("Retrying ARP request for IP {} on interface {}. Attempt #{}.", ip, eq.awaitingPackets.front().iface, req.timesSent + 1);
+            std::string iface = routingTable->getRoutingInterface(req.awaitingPackets.front().iface).name;
+            spdlog::debug("Retrying ARP request for IP {} on interface {}. Attempt #{}.", ip, req.awaitingPackets.front().iface, req.timesSent + 1);
 
             // arpSender->sendArpRequest(ip, route.name); // Schedule ARP request
             // arpSender->sendArpRequest(ip, route.ip, route.mac.data(), route.name); // Schedule ARP request
@@ -195,13 +195,13 @@ void ArpCache::tick() {
             // Target's hardware address is empty for a request
             std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
             // arpHeader->ar_tip = htonl(route->gateway);
-            arpHeader->ar_tip = route->gateway;
+            arpHeader->ar_tip = ip;
 
             // Print out the ARP request details
-            std::cout << "[ARP Request] Sending ARP request for gateway IP: " << route->gateway
-                    << " with source IP: " << senderIP << " via interface: " << route->iface << std::endl;
-                packetSender->sendPacket(arpRequest, route->iface);
-            std::cout << "[FORWARD IP] ARP request sent for gateway IP: " << route->gateway << std::endl;  
+            std::cout << "[ARP Request] Sending ARP request for gateway IP: " << ip
+                    << " with source IP: " << senderIP << " via interface: " << iface << std::endl;
+                packetSender->sendPacket(arpRequest, iface);
+            std::cout << "[FORWARD IP] ARP request sent for gateway IP: " << iface << std::endl;  
         }
     }
 
