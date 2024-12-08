@@ -118,7 +118,7 @@ void ICMPSender::sendPortUnreachable(const std::vector<uint8_t>& originalPacket,
     spdlog::info("Destination IP for ICMP port unreachable:");
     print_addr_ip_int(destIP);
 
-    auto icmpPacket = constructICMPPacket(originalPacket, sourceIP, destIP, sourceMAC, destMAC, 3, 3);
+    auto icmpPacket = constructICMPPacket(originalPacket, destIP, sourceIP, destMAC, sourceMAC, 3, 3);
     spdlog::debug("Successfully constructed ICMP packet.");
     packetSender_->sendPacket(icmpPacket, iface);
 
