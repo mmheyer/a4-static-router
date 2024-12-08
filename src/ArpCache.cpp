@@ -34,54 +34,57 @@ void ArpCache::loop() {
     }
 }
 
-void ArpCache::processPending() {
-    std::unique_lock lock(mutex);
+// void ArpCache::processPending() {
+//     std::unique_lock lock(mutex);
 
-    auto now = std::chrono::steady_clock::now();
-    std::vector<uint32_t> pendingRequestsToRemove;  // List of IPs whose requests have been processed (timeout or answered)
+//     auto now = std::chrono::steady_clock::now();
+//     std::vector<uint32_t> pendingRequestsToRemove;  // List of IPs whose requests have been processed (timeout or answered)
 
-    // Iterate through all the requests and process them
-    for (auto& [ip, req] : requests) {
-        // Check if the request has timed out
-        auto timeSinceLastSent = std::chrono::duration_cast<std::chrono::seconds>(now - req.lastSent);
+//     // Iterate through all the requests and process them
+//     for (auto& [ip, req] : requests) {
+//         // Check if the request has timed out
+//         auto timeSinceLastSent = std::chrono::duration_cast<std::chrono::seconds>(now - req.lastSent);
 
-        if (timeSinceLastSent >= std::chrono::seconds(1)) {
-            // Retry sending ARP request if the last one was sent more than a second ago
-            if (req.timesSent < 7) {  // Max retry attempts
-                auto route = routingTable->getRoutingInterface(req.awaitingPackets.front().iface);
-                spdlog::info("Retrying ARP request for IP {} on interface {}. Attempt #{}.", ip, route.name, req.timesSent + 1);
-                arpSender->sendArpRequest(ip, route.ip, route.mac.data(), route.name);
-                req.lastSent = now;
-                req.timesSent++;
-            } else {
-                // If retries are exhausted, mark for removal and send ICMP Destination Unreachable
-                spdlog::warn("Max retry limit reached for IP {}. Sending ICMP Destination Host Unreachable.", ip);
-                for (auto& awaitingPacket : req.awaitingPackets) {
-                    auto ifaceInfo = routingTable->getRoutingInterface(awaitingPacket.iface);
-                    sr_ethernet_hdr_t* ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t*>(awaitingPacket.packet.data());
-                    icmpSender->sendDestinationUnreachable(
-                        awaitingPacket.packet,
-                        ifaceInfo.mac,
-                        ifaceInfo.ip,
-                        extractSourceMAC(ethernet_hdr),
-                        extractSourceIP(awaitingPacket.packet),
-                        awaitingPacket.iface,
-                        ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE
-                    );
-                }
-                pendingRequestsToRemove.push_back(ip); // Mark IP for removal due to timeout
-            }
-        }
-    }
+//         if (timeSinceLastSent >= std::chrono::seconds(1)) {
+//             // Retry sending ARP request if the last one was sent more than a second ago
+//             if (req.timesSent < 7) {  // Max retry attempts
+//                 auto route = routingTable->getRoutingInterface(req.awaitingPackets.front().iface);
+//                 spdlog::info("Retrying ARP request for IP {} on interface {}. Attempt #{}.", ip, route.name, req.timesSent + 1);
+//                 arpSender->sendArpRequest(ip, route.ip, route.mac.data(), route.name);
+//                 req.lastSent = now;
+//                 req.timesSent++;
+//             } else {
+//                 // If retries are exhausted, mark for removal and send ICMP Destination Unreachable
+//                 spdlog::warn("Max retry limit reached for IP {}. Sending ICMP Destination Host Unreachable.", ip);
+//                 for (auto& awaitingPacket : req.awaitingPackets) {
+//                     auto ifaceInfo = routingTable->getRoutingInterface(awaitingPacket.iface);
+//                     sr_ethernet_hdr_t* ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t*>(awaitingPacket.packet.data());
+//                     icmpSender->sendDestinationUnreachable(
+//                         awaitingPacket.packet,
+//                         ifaceInfo.mac,
+//                         ifaceInfo.ip,
+//                         extractSourceMAC(ethernet_hdr),
+//                         extractSourceIP(awaitingPacket.packet),
+//                         awaitingPacket.iface,
+//                         ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE
+//                     );
+//                 }
+//                 pendingRequestsToRemove.push_back(ip); // Mark IP for removal due to timeout
+//             }
+//         }
+//     }
 
-    // Remove requests that are either successfully resolved or have timed out
-    for (uint32_t ip : pendingRequestsToRemove) {
-        requests.erase(ip);
-    }
-}
+//     // Remove requests that are either successfully resolved or have timed out
+//     for (uint32_t ip : pendingRequestsToRemove) {
+//         requests.erase(ip);
+//     }
+// }
 
 bool ArpCache::hasRequest(uint32_t ip) {
     std::lock_guard<std::mutex> lock(mutex); // Ensure thread safety
+
+    spdlog::debug("Checking if we have a request for IP:");
+    print_addr_ip_int(ip);
 
     // Check if the IP exists in the requests map
     return requests.find(ip) != requests.end();
@@ -90,53 +93,59 @@ bool ArpCache::hasRequest(uint32_t ip) {
 void ArpCache::tick() {
     std::unique_lock lock(mutex);
 
+    // spdlog::debug("Called tick.");
+
     auto now = std::chrono::steady_clock::now();
     std::vector<uint32_t> requestsToRemove; // Collect IPs to erase after processing
 
+    spdlog::debug("Number of requests = {}", requests.size());
     for (auto& [ip, req] : requests) {
         std::cout << "Processing ARP request for IP: " << ip << ", timesSent: " << req.timesSent
                   << ", lastSent: " << std::chrono::duration_cast<std::chrono::milliseconds>(now - req.lastSent).count()
                   << " ms ago.\n";
         // Check if a request has timed out (sent 7 times with no reply)
+        spdlog::debug("Request has been sent {} times.", req.timesSent);
         if (req.timesSent >= 7) {
             std::cout << "Max retries reached for IP " << ip << ". Sending ICMP Destination Host Unreachable.\n";
             spdlog::warn("ARP request for IP {} failed after {} attempts. Sending ICMP Destination Host Unreachable.", ip, req.timesSent);
 
             // Notify all awaiting packets with ICMP Destination Host Unreachable
             for (auto& awaitingPacket : req.awaitingPackets) {
-                
-                auto ifaceInfo = routingTable->getRoutingInterface(awaitingPacket.iface);
                 sr_ethernet_hdr_t *ethernet_hdr = reinterpret_cast<sr_ethernet_hdr_t *>(awaitingPacket.packet.data());
-                icmpSender->sendDestinationUnreachable(
-                    awaitingPacket.packet,
-                    ifaceInfo.mac,
-                    ifaceInfo.ip,
-                    extractSourceMAC(ethernet_hdr),
-                    extractSourceIP(awaitingPacket.packet),
-                    awaitingPacket.iface,
-                    ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE
-                );
 
+                mac_addr sourceMac = extractDestinationMAC(ethernet_hdr);
+                mac_addr destMac = extractSourceMAC(ethernet_hdr);
+                ip_addr destIp = extractSourceIP(awaitingPacket.packet);
 
-// Debugging outputs
-                std::cout << "[DEBUG] Packet Data: ";
-                for (const auto& byte : awaitingPacket.packet) {
-                    std::cout << std::hex << static_cast<int>(byte) << " ";
+                const auto& route = routingTable->getRoutingEntry(destIp);
+                if (!route) {
+                    spdlog::error("Can't find routing entry to send ICMP Destination Host Unreachable.");
+                    return;
                 }
-                std::cout << std::endl;
 
-                std::cout << "[DEBUG] Interface MAC Address: " << macToString(ifaceInfo.mac) << std::endl;
-                std::cout << "[DEBUG] Interface IP Address: " << ifaceInfo.ip << std::endl;
+                ip_addr sourceIp = routingTable->getRoutingInterface(route->iface).ip;
 
-                mac_addr srcMac = extractSourceMAC(ethernet_hdr);
-                std::cout << "[DEBUG] Source MAC Address: " << macToString(srcMac) << std::endl;
+                icmpSender->sendDestinationUnreachable(awaitingPacket.packet, sourceMac, sourceIp, destMac, destIp, route->iface, ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE);
 
-                uint32_t srcIp = extractSourceIP(awaitingPacket.packet);
-                std::cout << "[DEBUG] Source IP Address: " << srcIp << std::endl;
+                // Debugging outputs
+                // std::cout << "[DEBUG] Packet Data: ";
+                // for (const auto& byte : awaitingPacket.packet) {
+                //     std::cout << std::hex << static_cast<int>(byte) << " ";
+                // }
+                // std::cout << std::endl;
 
-                std::cout << "[DEBUG] Interface Name: " << awaitingPacket.iface << std::endl;
-                std::cout << "[DEBUG] ICMP Code: " << static_cast<int>(ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE) << std::endl;                
-                 std::cout << "Sent ICMP Destination Host Unreachable for packet on interface: " << awaitingPacket.iface << "\n";
+                // std::cout << "[DEBUG] Interface MAC Address: " << macToString(ifaceInfo.mac) << std::endl;
+                // std::cout << "[DEBUG] Interface IP Address: " << ifaceInfo.ip << std::endl;
+
+                // mac_addr srcMac = extractSourceMAC(ethernet_hdr);
+                // std::cout << "[DEBUG] Source MAC Address: " << macToString(srcMac) << std::endl;
+
+                // uint32_t srcIp = extractSourceIP(awaitingPacket.packet);
+                // std::cout << "[DEBUG] Source IP Address: " << srcIp << std::endl;
+
+                // std::cout << "[DEBUG] Interface Name: " << awaitingPacket.iface << std::endl;
+                // std::cout << "[DEBUG] ICMP Code: " << static_cast<int>(ICMPSender::DestinationUnreachableCode::HOST_UNREACHABLE) << std::endl;                
+                //  std::cout << "Sent ICMP Destination Host Unreachable for packet on interface: " << awaitingPacket.iface << "\n";
 
             }
 
@@ -145,13 +154,54 @@ void ArpCache::tick() {
             spdlog::debug("Removed request for IP {} due to destination unreachable.");
         } else if (now - req.lastSent >= std::chrono::seconds(1)) {
             // Retry ARP request if more than 1 second has passed since the last attempt
-            auto route = routingTable->getRoutingInterface(req.awaitingPackets.front().iface);
-            spdlog::info("Retrying ARP request for IP {} on interface {}. Attempt #{}.", ip, route.name, req.timesSent + 1);
+            req.lastSent = std::chrono::steady_clock::now();
+            req.timesSent++;
+
+            const uint8_t* senderMac = routingTable->getRoutingInterface(req.awaitingPackets.front().iface).mac.data();
+            auto senderIP = routingTable->getRoutingInterface(req.awaitingPackets.front().iface).ip;
+            routingTable->getRoutingInterface(req.awaitingPackets.front().iface).
+            spdlog::info("Retrying ARP request for IP {} on interface {}. Attempt #{}.", ip, eq.awaitingPackets.front().iface, req.timesSent + 1);
 
             // arpSender->sendArpRequest(ip, route.name); // Schedule ARP request
-            arpSender->sendArpRequest(ip, route.ip, route.mac.data(), route.name); // Schedule ARP request
+            // arpSender->sendArpRequest(ip, route.ip, route.mac.data(), route.name); // Schedule ARP request
             req.lastSent = now;
             req.timesSent++;
+
+            // Send ARP request manually
+            std::cout << "[FORWARD IP] sending ARP request manually" << std::endl;
+
+            // Construct the ARP request
+            std::vector<uint8_t> arpRequest(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+            auto* ethHeader = reinterpret_cast<sr_ethernet_hdr_t*>(arpRequest.data());
+
+            // Set Ethernet header
+            std::fill(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), 0xFF); // Broadcast MAC address
+            std::memcpy(ethHeader->ether_shost, senderMac, ETHER_ADDR_LEN); // Sender's MAC address
+            ethHeader->ether_type = htons(ethertype_arp);
+
+            // Set ARP header
+            auto* arpHeader = reinterpret_cast<sr_arp_hdr_t*>(arpRequest.data() + sizeof(sr_ethernet_hdr_t));
+            arpHeader->ar_hrd = htons(arp_hrd_ethernet); // Hardware type: Ethernet
+            arpHeader->ar_pro = htons(ethertype_ip);     // Protocol type: IPv4
+            arpHeader->ar_hln = ETHER_ADDR_LEN;         // Hardware address length
+            arpHeader->ar_pln = sizeof(uint32_t);       // Protocol address length
+            arpHeader->ar_op = htons(arp_op_request);   // ARP operation: request
+
+            // Sender's hardware and protocol addresses
+            std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
+            // arpHeader->ar_sip = htonl(senderIP);
+            arpHeader->ar_sip = senderIP;
+
+            // Target's hardware address is empty for a request
+            std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
+            // arpHeader->ar_tip = htonl(route->gateway);
+            arpHeader->ar_tip = route->gateway;
+
+            // Print out the ARP request details
+            std::cout << "[ARP Request] Sending ARP request for gateway IP: " << route->gateway
+                    << " with source IP: " << senderIP << " via interface: " << route->iface << std::endl;
+                packetSender->sendPacket(arpRequest, route->iface);
+            std::cout << "[FORWARD IP] ARP request sent for gateway IP: " << route->gateway << std::endl;  
         }
     }
 
@@ -171,6 +221,7 @@ void ArpCache::addEntry(uint32_t ip, const mac_addr& mac) {
     std::unique_lock lock(mutex);
     spdlog::info("Adding ARP cache entry for IP {} with MAC {}.", ip, macToString(mac));
 
+    // add entry to the cache
     entries[ip] = {ip, mac, std::chrono::steady_clock::now()};
 
     auto it = requests.find(ip);
@@ -191,11 +242,10 @@ void ArpCache::addEntry(uint32_t ip, const mac_addr& mac) {
 
             // Send the packet
             packetSender->sendPacket(packet, queuedIface);
-            packetSender->sendPacket(awaitingPacket.packet, awaitingPacket.iface);
+            // packetSender->sendPacket(awaitingPacket.packet, awaitingPacket.iface);
         }
 
         requests.erase(it);
-
     }
 }
 
@@ -257,7 +307,7 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
     // If there is no existing ARP request for this IP, create a new one
     if (it == requests.end()) {
         spdlog::info("Creating new ARP request queue for IP {}.", ip);
-        ArpRequest newRequest{ip, std::chrono::steady_clock::now(), 0, {}};
+        ArpRequest newRequest{ip, std::chrono::steady_clock::now(), 1, {}};
         newRequest.awaitingPackets.emplace_back(packet, iface);
         requests[ip] = std::move(newRequest);
         spdlog::debug("There are {} requests after adding a request.", requests.size());
@@ -267,69 +317,15 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
         it->second.awaitingPackets.emplace_back(packet, iface);
         spdlog::debug("There are {} requests after adding a request.", requests.size());
         logAwaitingPackets(it->second.awaitingPackets);
+
+        // update lastSent and timesSent
+        it->second.lastSent = std::chrono::steady_clock::now();
+        spdlog::debug("Updating last sent time.");
+        it->second.timesSent++;
+        spdlog::debug("Updating times sent to {}.", it->second.timesSent);
     }
 
-    std::cout << " * " << std::endl;
     lock.unlock();
-
-    // if (shouldSendArpRequest(ip)) {
-    //     std::cout << " ** " << std::endl;
-       
-    //     // Retrieve routing interface information
-    //     auto routingInterface = routingTable->getRoutingInterface(iface);
-    //     uint32_t senderIP = routingInterface.ip;
-    //     const uint8_t* senderMac = routingInterface.mac.data();
-    //     std::cout << "[arpcache queue] Routing Interface - Sender IP: " 
-    //       << senderIP << ", Sender MAC: " << routingInterface.mac.data() << std::endl;
-    //     // Build an ARP request packet
-    //     std::vector<uint8_t> arpPacket(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
-
-    //     // Ethernet header
-    //     auto* ethHeader = reinterpret_cast<sr_ethernet_hdr_t*>(arpPacket.data());
-    //     std::fill(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), 0xFF); // Broadcast MAC address
-    //     std::memcpy(ethHeader->ether_shost, senderMac, ETHER_ADDR_LEN); // Sender's MAC address
-    //     ethHeader->ether_type = htons(ethertype_arp);
-
-    //     std::cout << "[arpcache queue] Ethernet Header - Broadcast MAC, Sender MAC: ";
-    //     for (int i = 0; i < ETHER_ADDR_LEN; ++i) {
-    //         std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(ethHeader->ether_shost[i]);
-    //     }
-    //     std::cout << ", EtherType: " << std::hex << ntohs(ethHeader->ether_type) << std::dec << std::endl;
-
-
-    //     // ARP header
-    //     auto* arpHeader = reinterpret_cast<sr_arp_hdr_t*>(arpPacket.data() + sizeof(sr_ethernet_hdr_t));
-    //     arpHeader->ar_hrd = htons(arp_hrd_ethernet); // Hardware type: Ethernet
-    //     arpHeader->ar_pro = htons(ethertype_ip);     // Protocol type: IPv4
-    //     arpHeader->ar_hln = ETHER_ADDR_LEN;         // Hardware address length
-    //     arpHeader->ar_pln = sizeof(uint32_t);       // Protocol address length
-    //     arpHeader->ar_op = htons(arp_op_request);   // ARP operation: request
-
-    //     // Sender's hardware and protocol addresses
-    //     std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
-    //     arpHeader->ar_sip = senderIP;
-
-    //     // Target's hardware address is empty for a request
-    //     std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
-    //     arpHeader->ar_tip = ip;
-
-    //     std::cout << "[arpcache queue] ARP Header - Sender MAC: ";
-    //     for (int i = 0; i < ETHER_ADDR_LEN; ++i) {
-    //         std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(arpHeader->ar_sha[i]);
-    //     }
-    //     std::cout << ", Sender IP: " << std::dec << senderIP 
-    //             << ", Target IP: " << ip << std::endl;
-
-    //     // Log packet contents
-    //     spdlog::debug("ARP Request: Sender IP: {}, Target IP: {}", senderIP, ip);
-    //     std::cout << "[arpcache queue] ARP Packet ready, sending to interface: " << iface << std::endl;
-
-    //     // Send the ARP request directly
-    //     packetSender->sendPacket(arpPacket, iface);
-
-    //     std::cout << "ARP Request sent for IP: " << ip << " from sender IP: " << senderIP << " via interface: " << iface << ".\n";
-    // }
-    // std::cout << " * " << std::endl;
 
 }
 
@@ -405,17 +401,17 @@ std::optional<std::__cxx11::list<AwaitingPacket>> ArpCache::getQueuedPackets(uin
     return std::nullopt;
 }
 
-void ArpCache::removeRequest(uint32_t ip) {
-    std::unique_lock lock(mutex); // Ensure thread safety
+// void ArpCache::removeRequest(uint32_t ip) {
+//     std::unique_lock lock(mutex); // Ensure thread safety
 
-    auto it = requests.find(ip);
-    if (it != requests.end()) {
-        // Remove the ARP request entry
-        spdlog::info("Removing ARP request for IP:");
-        print_addr_ip_int(ip);
-        requests.erase(it);
-    } else {
-        spdlog::warn("Attempted to remove non-existent ARP request for IP:");
-        print_addr_ip_int(ip);
-    }
-}
+//     auto it = requests.find(ip);
+//     if (it != requests.end()) {
+//         // Remove the ARP request entry
+//         spdlog::info("Removing ARP request for IP:");
+//         print_addr_ip_int(ip);
+//         requests.erase(it);
+//     } else {
+//         spdlog::warn("Attempted to remove non-existent ARP request for IP:");
+//         print_addr_ip_int(ip);
+//     }
+// }
