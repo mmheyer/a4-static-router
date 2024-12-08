@@ -191,18 +191,22 @@ std::string macToString(const std::array<uint8_t, 6>& mac) {
 }
 
 uint32_t extractSourceIP(const std::vector<uint8_t>& packet) {
-    if (packet.size() < 20) {
-        spdlog::error("Packet is too small to contain an IP header.");
-    }
+  constexpr size_t ETHERNET_HEADER_SIZE = 14; // Typical size of Ethernet header
+  constexpr size_t IP_HEADER_MIN_SIZE = 20;  // Minimum size of IP header
 
-    // The source IP starts at offset 12 in the IP header
-    uint32_t srcIP;
+  // Ensure the packet has enough data for Ethernet + IP header
+  if (packet.size() < ETHERNET_HEADER_SIZE + IP_HEADER_MIN_SIZE) {
+      throw std::runtime_error("Packet too small to contain Ethernet and IP headers.");
+  }
 
-    // Copy the 4 bytes of the source IP address
-    std::memcpy(&srcIP, packet.data() + ETHER_ADDR_LEN + 12, sizeof(srcIP));
+  // Locate the start of the IP header
+  const uint8_t* ipHeader = packet.data() + ETHERNET_HEADER_SIZE;
 
-    // Convert to host byte order
-    return ntohl(srcIP);
+  // Source IP address is at offset 12 within the IP header
+  uint32_t sourceIP;
+  std::memcpy(&sourceIP, ipHeader + 12, sizeof(sourceIP));
+
+  return sourceIP;
 }
 
 /**

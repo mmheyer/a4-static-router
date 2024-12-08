@@ -317,7 +317,8 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
     std::cout << "[IP Header] Protocol: " << (int)(ipHeader->ip_p) << std::endl;
     std::cout << "[IP Header] Total Length: " << (int)(ipHeader->ip_len)  << std::endl;
 
-    mac_addr icmpSourceMAC = extractDestinationMAC(ethernet_hdr);
+    // mac_addr icmpSourceMAC = extractDestinationMAC(ethernet_hdr);
+    mac_addr icmpSourceMAC = routingTable->getRoutingInterface(iface).mac;
     mac_addr icmpDestMAC = extractSourceMAC(ethernet_hdr);
     ip_addr icmpSourceIp = routingTable->getRoutingInterface(iface).ip;
     ip_addr icmpDestIp = ipHeader->ip_src;
@@ -439,7 +440,8 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
     std::cout << std::dec << route->dest << route->iface << std::endl;
 
     // Check ARP cache for next-hop MAC
-    auto nextHopMAC = arpCache->getEntry(ntohl(route->gateway));
+    // auto nextHopMAC = arpCache->getEntry(ntohl(route->gateway));
+    auto nextHopMAC = arpCache->getEntry(ntohl(ipHeader->ip_dst));
     if (nextHopMAC) {
         std::cout << "[FORWARD IP] next hop" << std::endl;
         // Update Ethernet header with next-hop MAC and router's MAC
@@ -450,45 +452,49 @@ void StaticRouter::forwardIPPacket(std::vector<uint8_t>& packet, const std::stri
         packetSender->sendPacket(packet, route->iface);
     } else {
        std::cout << "[FORWARD IP] queue" << std::endl;
-        arpCache->queuePacket(ntohl(route->gateway), packet, route->iface);
+        // arpCache->queuePacket(ntohl(route->gateway), packet, route->iface);
+        arpCache->queuePacket(ntohl(ipHeader->ip_dst), packet, route->iface);
 
-        // Send ARP request manually
-        std::cout << "[FORWARD IP] sending ARP request manually" << std::endl;
+        // // Send ARP request manually
+        // std::cout << "[FORWARD IP] sending ARP request manually" << std::endl;
 
-        // Construct the ARP request
-        std::vector<uint8_t> arpRequest(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
-        auto* ethHeader = reinterpret_cast<sr_ethernet_hdr_t*>(arpRequest.data());
+        // // Construct the ARP request
+        // std::vector<uint8_t> arpRequest(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+        // auto* ethHeader = reinterpret_cast<sr_ethernet_hdr_t*>(arpRequest.data());
 
-        // Set Ethernet header
-        std::fill(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), 0xFF); // Broadcast MAC address
-        std::memcpy(ethHeader->ether_shost, routingTable->getRoutingInterface(route->iface).mac.data(), ETHER_ADDR_LEN); // Sender's MAC address
-        ethHeader->ether_type = htons(ethertype_arp);
+        // // Set Ethernet header
+        // std::fill(std::begin(ethHeader->ether_dhost), std::end(ethHeader->ether_dhost), 0xFF); // Broadcast MAC address
+        // std::memcpy(ethHeader->ether_shost, routingTable->getRoutingInterface(route->iface).mac.data(), ETHER_ADDR_LEN); // Sender's MAC address
+        // ethHeader->ether_type = htons(ethertype_arp);
 
-        // Set ARP header
-        auto* arpHeader = reinterpret_cast<sr_arp_hdr_t*>(arpRequest.data() + sizeof(sr_ethernet_hdr_t));
-        arpHeader->ar_hrd = htons(arp_hrd_ethernet); // Hardware type: Ethernet
-        arpHeader->ar_pro = htons(ethertype_ip);     // Protocol type: IPv4
-        arpHeader->ar_hln = ETHER_ADDR_LEN;         // Hardware address length
-        arpHeader->ar_pln = sizeof(uint32_t);       // Protocol address length
-        arpHeader->ar_op = htons(arp_op_request);   // ARP operation: request
+        // // Set ARP header
+        // auto* arpHeader = reinterpret_cast<sr_arp_hdr_t*>(arpRequest.data() + sizeof(sr_ethernet_hdr_t));
+        // arpHeader->ar_hrd = htons(arp_hrd_ethernet); // Hardware type: Ethernet
+        // arpHeader->ar_pro = htons(ethertype_ip);     // Protocol type: IPv4
+        // arpHeader->ar_hln = ETHER_ADDR_LEN;         // Hardware address length
+        // arpHeader->ar_pln = sizeof(uint32_t);       // Protocol address length
+        // arpHeader->ar_op = htons(arp_op_request);   // ARP operation: request
 
-        // Sender's hardware and protocol addresses
-        auto senderIP = routingTable->getRoutingInterface(route->iface).ip;
-        const uint8_t* senderMac = routingTable->getRoutingInterface(route->iface).mac.data();
-        std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
-        // arpHeader->ar_sip = htonl(senderIP);
-        arpHeader->ar_sip = senderIP;
+        // // Sender's hardware and protocol addresses
+        // auto senderIP = routingTable->getRoutingInterface(route->iface).ip;
+        // const uint8_t* senderMac = routingTable->getRoutingInterface(route->iface).mac.data();
+        // std::memcpy(arpHeader->ar_sha, senderMac, ETHER_ADDR_LEN);
+        // // arpHeader->ar_sip = htonl(senderIP);
+        // arpHeader->ar_sip = senderIP;
 
-        // Target's hardware address is empty for a request
-        std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
-        // arpHeader->ar_tip = htonl(route->gateway);
-        arpHeader->ar_tip = route->gateway;
+        // // Target's hardware address is empty for a request
+        // std::fill(std::begin(arpHeader->ar_tha), std::end(arpHeader->ar_tha), 0x00);
+        // // arpHeader->ar_tip = htonl(route->gateway);
+        // // arpHeader->ar_tip = route->gateway;
+        // arpHeader->ar_tip = ipHeader->ip_dst;
 
-        // Print out the ARP request details
-        std::cout << "[ARP Request] Sending ARP request for gateway IP: " << route->gateway
-                  << " with source IP: " << senderIP << " via interface: " << route->iface << std::endl;
-             packetSender->sendPacket(arpRequest, route->iface);
-        std::cout << "[FORWARD IP] ARP request sent for gateway IP: " << route->gateway << std::endl;  
+        // // Print out the ARP request details
+        // // std::cout << "[ARP Request] Sending ARP request for gateway IP: " << route->gateway
+        // //           << " with source IP: " << senderIP << " via interface: " << route->iface << std::endl;
+        // //      packetSender->sendPacket(arpRequest, route->iface);
+        // // std::cout << "[FORWARD IP] ARP request sent for gateway IP: " << route->gateway << std::endl;  
+        // spdlog::info("ARP request sent for IP:");
+        // print_addr_ip_int(ipHeader->ip_dst);
     }
 }
 

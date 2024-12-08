@@ -17,7 +17,7 @@
 #include "RouterTypes.h"
 #include "IRoutingTable.h"
 #include "ICMPSender.h"
-#include "ARPSender.h"
+// #include "ARPSender.h"
 
 class ArpCache : public IArpCache {
 public:
@@ -35,11 +35,7 @@ public:
     void queuePacket(uint32_t ip, const Packet& packet, const std::string& iface) override;
 
     bool hasRequest(uint32_t senderIp);
-    // void processPending();
-    // bool shouldSendArpRequest(uint32_t destIp);
     std::optional<std::__cxx11::list<AwaitingPacket>> getQueuedPackets(uint32_t ip);
-    // void removeRequest(uint32_t ip);
-
 private:
     void loop();
 
@@ -56,7 +52,10 @@ private:
     std::unordered_map<ip_addr, ArpRequest> requests;
 
     std::shared_ptr<ICMPSender> icmpSender;
-    std::shared_ptr<ARPSender> arpSender;
+    // std::shared_ptr<ARPSender> arpSender;
+
+    void processRequest(ArpRequest& req);
+    void sendArpRequest(uint32_t targetIP, uint32_t senderIP, const uint8_t senderMac[6], const std::string& iface);
 };
 
 #endif //ARPCACHE_H
