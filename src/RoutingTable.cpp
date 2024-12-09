@@ -58,7 +58,6 @@ std::optional<RoutingEntry> RoutingTable::getRoutingEntry(ip_addr ip) {
         if (network == ip_network) {
             int prefixLength = __builtin_popcount(entry.mask);;
             
-
             if (prefixLength > longestPrefixMatch) {
                 longestPrefixMatch = prefixLength;
                 bestMatch = entry;

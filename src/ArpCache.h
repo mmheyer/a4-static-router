@@ -54,7 +54,7 @@ private:
     std::shared_ptr<ICMPSender> icmpSender;
     // std::shared_ptr<ARPSender> arpSender;
 
-    void processRequest(ArpRequest& req);
+    bool processRequest(ArpRequest& req);
     void sendArpRequest(uint32_t targetIP, uint32_t senderIP, const uint8_t senderMac[6], const std::string& iface);
 };
 
