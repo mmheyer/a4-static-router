@@ -325,7 +325,7 @@ void ArpCache::queuePacket(uint32_t ip, const Packet& packet, const std::string&
     }
 
     std::cout << " * " << std::endl;
-    // lock.unlock();
+    lock.unlock();
 }
 
 

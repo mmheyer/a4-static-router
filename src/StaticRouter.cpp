@@ -304,9 +304,10 @@ void StaticRouter::handleIP(std::vector<uint8_t>& packet, const std::string& ifa
                     icmpSourceIp = ifaceInfo.ip;
                     spdlog::info("Packet contains TCP payload. Sending ICMP port unreachable.");
                     icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIp, icmpDestMAC, icmpDestIp, iface);
+                } else {
+                    spdlog::info("Packet contains TCP or UDP payload. Sending ICMP port unreachable.");
+                    icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIp, icmpDestMAC, icmpDestIp, iface);
                 }
-                spdlog::info("Packet contains TCP or UDP payload. Sending ICMP port unreachable.");
-                icmpSender->sendPortUnreachable(packet, icmpSourceMAC, icmpSourceIp, icmpDestMAC, icmpDestIp, iface);
             }
             // otherwise, discard the packet
             return;
